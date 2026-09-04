@@ -82,7 +82,20 @@
 #define JRIDE_SCRATCH_SIZE         0x3ee  // 1006 bytes
 
 #ifdef ENABLE_XTIDE_LOG
-uint8_t xtide_do_log = ENABLE_XTIDE_LOG;
+/* DIAGNOSTIC, not for upstream.
+ *
+ * Default OFF, opt in with XTIDE_TRACE=1, matching INBOARD_MEM_TRACE /
+ * INBOARD_DMA_TRACE / INBOARD_MEMWATCH elsewhere in this fork.
+ *
+ * It logged one formatted line, with CS:EIP, per PIO *byte*. On the Lo-tech
+ * XT-CF the data register is 8-bit, so a 512-byte sector is 512 lines before
+ * any status polling - 11,096,197 lines and 438 MB for one boot-and-shutdown,
+ * with the emulator reporting 2-14% of configured speed in its title bar.
+ * The question this hook was added for (does our port driver reach the card,
+ * and at what stride) was answered on 2026-09-04; it has been taxing every
+ * boot since. Technique 21: a diagnostic with no remaining diagnostic value
+ * and a real per-boot cost is a liability, not a harmless leftover. */
+uint8_t xtide_do_log = 0;
 
 static void
 xtide_log(void *priv, const char *fmt, ...)
@@ -233,6 +246,17 @@ xtide_init(const device_t *info)
     /* DIAGNOSTIC: only jride_init opened a log, so every xtide_log() call on
        the plain card was dropped against a NULL pointer. */
     xtide->log = log_open("XTIDE");
+
+    /* ...and opt in explicitly, because with the NULL fixed this became the
+       single largest cost in a run. Say so on stderr either way: a trace that
+       is silently off is how a session concludes "nothing happened". */
+    {
+        const char *t = getenv("XTIDE_TRACE");
+        xtide_do_log = (t && *t && *t != '0') ? 1 : 0;
+        pclog("XTIDE: access trace %s (XTIDE_TRACE=%s)\n",
+              xtide_do_log ? "ON - expect ~440MB and 2-14% of configured speed" : "off",
+              t ? t : "unset");
+    }
 #endif
 
     rom_init(&xtide->bios_rom,
