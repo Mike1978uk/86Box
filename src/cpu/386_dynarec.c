@@ -1183,6 +1183,14 @@ inboard_post_fixups(void)
 
 }
 
+/* DIAGNOSTIC, not for upstream: sample the guest CS:EIP into the logfile once
+   every HB_PERIOD outer iterations. Without it, silence in a device log is
+   ambiguous - a wedged guest and a finished one look identical. pclog folds
+   identical consecutive lines into '*** N repeats ***', so a tight spin costs
+   one line and hands back an exact count. Revert before any PR. */
+#define HB_PERIOD 2000
+static uint32_t hb_ctr = 0;
+
 void
 exec386(int32_t cycs)
 {
@@ -1195,6 +1203,25 @@ exec386(int32_t cycs)
     uint32_t addr;
 
     cycles += cycs;
+
+    if (++hb_ctr >= HB_PERIOD) {
+        char     hbbytes[64];
+        uint32_t hblin = cs + cpu_state.pc;
+        int      hbsav = cpu_state.abrt;
+
+        hb_ctr = 0;
+        /* Read the instruction bytes at CS:EIP through the normal linear path
+           so paging is honoured, then restore abrt - a diagnostic must never
+           leave a fault pending for the guest (technique 45). */
+        for (int i = 0; i < 16; i++)
+            sprintf(hbbytes + i * 3, "%02X ", readmembl(hblin + i));
+        cpu_state.abrt = hbsav;
+
+        pclog("HEARTBEAT [%04X:%08X] cpl=%i pm=%i | %s| "
+              "eax=%08X ebx=%08X ecx=%08X esi=%08X edi=%08X esp=%08X\n",
+              CS, cpu_state.pc, CPL, (int) (cr0 & 1), hbbytes,
+              EAX, EBX, ECX, ESI, EDI, ESP);
+    }
 
     while (cycles > 0) {
         cycle_period = (timer_target - (uint64_t) tsc) + 1;

@@ -730,6 +730,37 @@ inboard386_speed_changed(void *priv)
     inboard386_apply_reg_op_waitstates();
 }
 
+/* DIAGNOSTIC, not for upstream: a write-only debug channel for guest drivers.
+   0x00E0 = tag byte, starts a record.  0x00E1 = data, four writes LSB-first
+   complete one dword and emit it.  Chosen because the XT system board reserves
+   000-09F in eight 32-byte blocks (8237/8259/8253/8255/DMA page) and nothing on
+   this machine decodes 0E0h - see technique 75 on why 0x80 is NOT free here.
+   Lets a driver report counters with no disk access and no shared state at all,
+   which matters when the thing under test IS the disk path.  Revert before any
+   PR. */
+static uint8_t  inboard_dbg_tag = 0;
+static uint32_t inboard_dbg_val = 0;
+static int      inboard_dbg_n   = 0;
+
+static void
+inboard_dbg_write(uint16_t port, uint8_t val, UNUSED(void *priv))
+{
+    if ((port & 1) == 0) {
+        inboard_dbg_tag = val;
+        inboard_dbg_val = 0;
+        inboard_dbg_n   = 0;
+        return;
+    }
+
+    inboard_dbg_val |= ((uint32_t) val) << (8 * inboard_dbg_n);
+    if (++inboard_dbg_n >= 4) {
+        pclog("DBGPORT tag=%02X val=%08X (%u)\n", inboard_dbg_tag,
+              inboard_dbg_val, inboard_dbg_val);
+        inboard_dbg_val = 0;
+        inboard_dbg_n   = 0;
+    }
+}
+
 static void *
 inboard386_init(const device_t *info)
 {
@@ -886,6 +917,8 @@ inboard386_init(const device_t *info)
         io_sethandler(0x0674, 1, NULL, NULL, NULL, inboard386_write_674, NULL, NULL, dev);
     }
     io_sethandler(0x0670, 1, NULL, NULL, NULL, inboard386_write_670, NULL, NULL, dev);
+
+    io_sethandler(0x00e0, 2, NULL, NULL, NULL, inboard_dbg_write, NULL, NULL, dev);
 
     /* The real host motherboard's 8259 PIC is a genuine XT-class discrete chip, wired up
        unchanged regardless of what CPU sits on the accelerator card - but 86Box's PIC model

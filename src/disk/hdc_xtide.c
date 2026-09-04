@@ -31,6 +31,10 @@
  *          Copyright 2017-2018 Fred N. van Kempen.
  *          Copyright 2025-2026 Jasmine Iwanek.
  */
+/* DIAGNOSTIC, not for upstream: log every XT-IDE access with the guest EIP,
+   to establish whether the Win95 shutdown freeze is a wedge or a timeout
+   storm. Revert before any PR. */
+#define ENABLE_XTIDE_LOG 1
 #ifdef ENABLE_XTIDE_LOG
 #include <stdarg.h>
 #endif
@@ -56,6 +60,10 @@
 #define ROM_PATH_TINY   "roms/hdd/xtide/ide_tiny.bin"
 #define ROM_PATH_XT     "roms/hdd/xtide/ide_xt.bin"
 #define ROM_PATH_XTP    "roms/hdd/xtide/ide_xtp.bin"
+/* This project: the XTIDE Universal BIOS XT+ r638 build as configured and flashed
+   onto a real Lo-tech XT-CF rev 3 (read back off the card 2026-08-31). Paired with
+   the stride-2 decode below it makes the emulated card match that hardware. */
+#define ROM_PATH_XTCF   "roms/hdd/xtide/ide_xtcf_lotech.bin"
 #define ROM_PATH_AT     "roms/hdd/xtide/ide_at.bin"
 #define ROM_PATH_AT_386 "roms/hdd/xtide/ide_386.bin"
 #define ROM_PATH_PS2    "roms/hdd/xtide/SIDE1V12.BIN"
@@ -93,6 +101,11 @@ xtide_log(void *priv, const char *fmt, ...)
 typedef struct xtide_t {
     void   *ide_board;
     uint8_t data_high;
+    uint8_t shift;      /* address shift: 0 = base+N, 1 = base+2N (A0 undecoded) */
+    uint8_t eight_bit;  /* CF is in 8-bit PIO mode (SET FEATURES 01h) */
+    uint8_t hi_pending; /* second half of the current 16-bit word is due */
+    uint8_t hi_byte;    /* ...and this is it */
+    uint8_t feature;    /* last value written to the Features register */
     rom_t   bios_rom;
 
     mem_mapping_t jride_window_mapping;
@@ -110,16 +123,40 @@ xtide_write(uint16_t port, uint8_t val, void *priv)
 {
     xtide_t *xtide = (xtide_t *) priv;
 
-    uint8_t reg = (port & 0xf);
+    uint8_t reg = (port >> xtide->shift) & 0xf;
 
     xtide_log(xtide->log, "[%04X:%08X] [W] %04X = %02X\n", CS, cpu_state.pc, reg, val);
 
     switch (reg) {
         case 0x0:
-            ide_writew(0x0, val | (xtide->data_high << 8), xtide->ide_board);
+            if (xtide->eight_bit) {
+                if (xtide->hi_pending) {
+                    ide_writew(0x0, xtide->hi_byte | (val << 8), xtide->ide_board);
+                    xtide->hi_pending = 0;
+                } else {
+                    xtide->hi_byte    = val;
+                    xtide->hi_pending = 1;
+                }
+            } else
+                ide_writew(0x0, val | (xtide->data_high << 8), xtide->ide_board);
             break;
 
         case 0x1 ... 0x7:
+            /* SET FEATURES (command EFh) with feature 01h enables 8-bit PIO,
+               81h disables it. 86Box's IDE core does not model that, so the
+               card tracks it here - it only affects how this card presents the
+               data register, not the drive. */
+            if (reg == 0x1)
+                xtide->feature = val;
+            if (reg == 0x7) {
+                xtide->hi_pending = 0;   /* a command resets the byte phase */
+                if (val == 0xef) {
+                    if (xtide->feature == 0x01)
+                        xtide->eight_bit = 1;
+                    else if (xtide->feature == 0x81)
+                        xtide->eight_bit = 0;
+                }
+            }
             ide_writeb(reg, val, xtide->ide_board);
             break;
 
@@ -141,13 +178,29 @@ xtide_read(uint16_t port, void *priv)
 {
     xtide_t *xtide = (xtide_t *) priv;
 
-    uint8_t reg = (port & 0xf);
+    uint8_t reg = (port >> xtide->shift) & 0xf;
     uint16_t tempw = 0xffff;
 
     switch (reg) {
         case 0x0:
-            tempw            = ide_readw(0x0, xtide->ide_board);
-            xtide->data_high = tempw >> 8;
+            /* In 8-bit PIO the data register is byte wide: consecutive reads
+               return the low then the high half of each word, and there is no
+               separate high-byte latch. This is what a Lo-tech XT-CF does once
+               the BIOS has sent SET FEATURES 01h, and reading a word per access
+               instead drops every second byte. */
+            if (xtide->eight_bit) {
+                if (xtide->hi_pending) {
+                    tempw            = xtide->hi_byte;
+                    xtide->hi_pending = 0;
+                } else {
+                    tempw             = ide_readw(0x0, xtide->ide_board);
+                    xtide->hi_byte    = tempw >> 8;
+                    xtide->hi_pending = 1;
+                }
+            } else {
+                tempw            = ide_readw(0x0, xtide->ide_board);
+                xtide->data_high = tempw >> 8;
+            }
             break;
 
         case 0x1 ... 0x7:
@@ -176,13 +229,32 @@ xtide_init(const device_t *info)
 {
     xtide_t *xtide = calloc(1, sizeof(xtide_t));
 
+#ifdef ENABLE_XTIDE_LOG
+    /* DIAGNOSTIC: only jride_init opened a log, so every xtide_log() call on
+       the plain card was dropped against a NULL pointer. */
+    xtide->log = log_open("XTIDE");
+#endif
+
     rom_init(&xtide->bios_rom,
              device_get_bios_file(info, device_get_config_bios("bios"), 0),
              device_get_config_hex20("bios_addr"), 0x2000, 0x1fff, 0, MEM_MAPPING_EXTERNAL);
 
     xtide->ide_board = ide_xtide_init();
 
-    io_sethandler(device_get_config_hex16("base"), 16,
+    /* Register stride. A classic XT-IDE decodes A0..A3, so registers land at
+       base+N over 16 ports. The Lo-tech XT-CF rev 3 does not decode A0, so the
+       same 16 registers are spread over 32 ports at base+2N - measured on the
+       real card 2026-08-31, and the reason a driver built for one addresses the
+       wrong registers on the other. Default 1 keeps every existing config
+       byte-identical. */
+    xtide->shift = device_get_config_int("stride") == 2 ? 1 : 0;
+
+    pclog("XTIDE: base %04X  stride %i  bios %s\n",
+          device_get_config_hex16("base"),
+          device_get_config_int("stride"),
+          device_get_config_bios("bios"));
+
+    io_sethandler(device_get_config_hex16("base"), 16 << xtide->shift,
                   xtide_read, NULL, NULL,
                   xtide_write, NULL, NULL,
                   xtide);
@@ -522,6 +594,15 @@ static const device_config_t xtide_config[] = {
                 .size          = 8192,
                 .files         = { ROM_PATH_XTP, "" }
             },
+            {
+                .name          = "Lo-tech XT-CF (XT+ r638, as flashed)",
+                .internal_name = "xtcf_lotech",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 8192,
+                .files         = { ROM_PATH_XTCF, "" }
+            },
             { .files_no = 0 }
         },
     },
@@ -618,6 +699,21 @@ static const device_config_t xtide_config[] = {
             { .description = "EC00H",    .value = 0xec000 },
 #endif
             { .description = ""                           }
+        },
+        .bios           = { { 0 } }
+    },
+    {
+        .name           = "stride",
+        .description    = "Register stride",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = 1,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
+            { .description = "1 - base+N (classic XT-IDE)",         .value = 1 },
+            { .description = "2 - base+2N (Lo-tech XT-CF, no A0)",  .value = 2 },
+            { .description = ""                                                }
         },
         .bios           = { { 0 } }
     },
