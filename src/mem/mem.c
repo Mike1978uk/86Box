@@ -804,11 +804,27 @@ readmembl(uint32_t addr)
     return 0xff;
 }
 
+/* DIAGNOSTIC, not for upstream: watch a small linear range and report every
+   write to it with the guest CS:EIP. Added 2026-09-04 to find what sets the
+   VMM globals a Win95 shutdown spins on. Zero cost when the range is unset.
+   Revert before any PR. */
+uint32_t mem_watch_lo = 0;
+uint32_t mem_watch_hi = 0;
+
+static inline void
+mem_watch_hit(uint32_t addr, uint32_t val, int width)
+{
+    if ((mem_watch_hi != 0) && (addr >= mem_watch_lo) && (addr <= mem_watch_hi))
+        pclog("MEMWATCH [%04X:%08X] w%i %08X = %08X\n", CS, cpu_state.pc, width, addr, val);
+}
+
 void
 writemembl(uint32_t addr, uint8_t val)
 {
     mem_mapping_t *map;
     uint64_t       a;
+
+    mem_watch_hit(addr, val, 1);
 
     GDBSTUB_MEM_ACCESS(addr, GDBSTUB_MEM_WRITE, 1);
 #ifdef USE_DEBUG_REGS_486
@@ -870,6 +886,8 @@ writemembl_no_mmut(uint32_t addr, uint32_t a64, uint8_t val)
 {
     mem_mapping_t *map;
 
+
+    mem_watch_hit(addr, val, 1);
     GDBSTUB_MEM_ACCESS(addr, GDBSTUB_MEM_WRITE, 1);
 
     mem_logical_addr = addr;
@@ -961,6 +979,8 @@ writememwl(uint32_t addr, uint16_t val)
     mem_mapping_t *map;
     uint64_t       a;
 
+
+    mem_watch_hit(addr, val, 2);
     addr64a[0] = addr;
     addr64a[1] = addr + 1;
 #ifdef USE_DEBUG_REGS_486
@@ -1084,6 +1104,8 @@ writememwl_no_mmut(uint32_t addr, uint32_t *a64, uint16_t val)
 {
     mem_mapping_t *map;
 
+
+    mem_watch_hit(addr, val, 2);
     GDBSTUB_MEM_ACCESS(addr, GDBSTUB_MEM_WRITE, 2);
 
     mem_logical_addr = addr;
@@ -1215,6 +1237,7 @@ readmemll(uint32_t addr)
 void
 writememll(uint32_t addr, uint32_t val)
 {
+    mem_watch_hit(addr, val, 4);
     mem_mapping_t *map;
     int            i;
     uint64_t       a = 0x0000000000000000ULL;
@@ -1362,6 +1385,8 @@ writememll_no_mmut(uint32_t addr, uint32_t *a64, uint32_t val)
 {
     mem_mapping_t *map;
 
+
+    mem_watch_hit(addr, val, 4);
     GDBSTUB_MEM_ACCESS(addr, GDBSTUB_MEM_WRITE, 4);
 
     mem_logical_addr = addr;

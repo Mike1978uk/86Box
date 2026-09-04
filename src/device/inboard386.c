@@ -920,6 +920,19 @@ inboard386_init(const device_t *info)
 
     io_sethandler(0x00e0, 2, NULL, NULL, NULL, inboard_dbg_write, NULL, NULL, dev);
 
+    /* DIAGNOSTIC: arm the linear write watch on the two VMM globals a Win95
+       shutdown was measured spinning on (cmp [C000E9F4],eax / jne, and
+       cmp word [C000E9F0],0). Set INBOARD_MEMWATCH=0 to disable. */
+    {
+        extern uint32_t mem_watch_lo, mem_watch_hi;
+        const char *mw = getenv("INBOARD_MEMWATCH");
+        if ((mw == NULL) || (mw[0] != 0x30)) {
+            mem_watch_lo = 0xc000e9f0;
+            mem_watch_hi = 0xc000e9f7;
+            pclog("MEMWATCH armed %08X-%08X\n", mem_watch_lo, mem_watch_hi);
+        }
+    }
+
     /* The real host motherboard's 8259 PIC is a genuine XT-class discrete chip, wired up
        unchanged regardless of what CPU sits on the accelerator card - but 86Box's PIC model
        (pic.c ~line 546) picks its IMR-update timing behavior (synchronous vs the real 8088's
