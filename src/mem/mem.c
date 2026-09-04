@@ -814,8 +814,31 @@ uint32_t mem_watch_hi = 0;
 static inline void
 mem_watch_hit(uint32_t addr, uint32_t val, int width)
 {
-    if ((mem_watch_hi != 0) && (addr >= mem_watch_lo) && (addr <= mem_watch_hi))
-        pclog("MEMWATCH [%04X:%08X] w%i %08X = %08X\n", CS, cpu_state.pc, width, addr, val);
+    if ((mem_watch_hi != 0) && (addr >= mem_watch_lo) && (addr <= mem_watch_hi)) {
+        pclog("MEMWATCH [%04X:%08X] w%i %08X = %08X | eax=%08X ebx=%08X ecx=%08X "
+              "edx=%08X esi=%08X edi=%08X ebp=%08X\n",
+              CS, cpu_state.pc, width, addr, val, EAX, EBX, ECX, EDX, ESI, EDI, EBP);
+
+        /* Name the object being queued and the caller that queued it. The
+           value is a ring-0 pointer, so dump its first 32 bytes and the top
+           of the stack in the same breath - one run answers "what is it" and
+           "who put it there" instead of two. Restore abrt: a diagnostic must
+           never leave a fault pending for the guest. */
+        if ((width == 4) && (val >= 0xc0000000)) {
+            char nb[128];
+            char sb[128];
+            int  sav = cpu_state.abrt;
+
+            for (int i = 0; i < 32; i++)
+                sprintf(nb + i * 3, "%02X ", readmembl(val + i));
+            for (int i = 0; i < 8; i++)
+                sprintf(sb + i * 9, "%08X ", readmemll(ESP + (i * 4)));
+            cpu_state.abrt = sav;
+
+            pclog("MEMWATCH  node %08X | %s\n", val, nb);
+            pclog("MEMWATCH  stack esp=%08X | %s\n", ESP, sb);
+        }
+    }
 }
 
 void

@@ -927,8 +927,8 @@ inboard386_init(const device_t *info)
         extern uint32_t mem_watch_lo, mem_watch_hi;
         const char *mw = getenv("INBOARD_MEMWATCH");
         if ((mw == NULL) || (mw[0] != 0x30)) {
-            mem_watch_lo = 0xc000e9f0;
-            mem_watch_hi = 0xc000e9f7;
+            mem_watch_lo = 0xc0010808;
+            mem_watch_hi = 0xc001081f;
             pclog("MEMWATCH armed %08X-%08X\n", mem_watch_lo, mem_watch_hi);
         }
     }

@@ -51,6 +51,22 @@
 
 #define CPU_BLOCK_END() cpu_block_end = 1
 
+/* DIAGNOSTIC, not for upstream: raw ring of the last CT_RING instruction
+   addresses and their EAX, EXCLUDING the addresses of the spin loop itself so
+   the ring keeps the path INTO it rather than filling with the loop. Dumped
+   once, after the loop has clearly wedged. Added 2026-09-04 to find what sets
+   EAX to zero before the wait at C0003184. Revert before any PR. */
+#define CT_RING   256
+#define CT_LO     0xc000317c          /* spin loop, inclusive */
+#define CT_HI     0xc000318f
+#define CT_SPIN   0xc0003184          /* the cmp inside it */
+#define CT_STUCK  2000000              /* hits before we call it wedged */
+static uint32_t ct_ring[CT_RING];
+static uint32_t ct_eax[CT_RING];
+static uint32_t ct_pos   = 0;
+static uint32_t ct_spins = 0;
+static int      ct_hits  = 0;
+
 int cpu_force_interpreter   = 0;
 int cpu_override_dynarec    = 0;
 int inrecomp                = 0;
@@ -1190,6 +1206,8 @@ inboard_post_fixups(void)
    one line and hands back an exact count. Revert before any PR. */
 #define HB_PERIOD 2000
 static uint32_t hb_ctr = 0;
+static int      tw_hits = 0; /* consecutive heartbeat samples inside the wedge */
+static int      tw_done = 0; /* the thread-list walk is one-shot */
 
 void
 exec386(int32_t cycs)
@@ -1221,6 +1239,60 @@ exec386(int32_t cycs)
               "eax=%08X ebx=%08X ecx=%08X esi=%08X edi=%08X esp=%08X\n",
               CS, cpu_state.pc, CPL, (int) (cr0 & 1), hbbytes,
               EAX, EBX, ECX, ESI, EDI, ESP);
+
+        /* DIAGNOSTIC, not for upstream: when the Win95 shutdown wedge is
+           established, walk the VMM thread list once and dump every node still
+           on it. The wedge is VMM spinning on "is the System VM thread list
+           empty" (cmp [C0010810],C001080C at C0008F8A); every node carries the
+           THCB signature at +0Ch. Four driver-side fixes changed the teardown
+           by not one AEP, so name the thread that will not exit instead of
+           reasoning about which declaration should have mattered.
+
+           Armed only by CONSECUTIVE samples inside the two spinning clusters -
+           both ranges run in ordinary operation too, so a plain hit count would
+           fire during a healthy boot. Fires once. */
+        if (!tw_done) {
+            uint32_t p = cpu_state.pc;
+            if ((CS == 0x0028) && (((p >= 0xc0003100) && (p <= 0xc0003300)) || ((p >= 0xc0008e00) && (p <= 0xc0009100))))
+                tw_hits++;
+            else
+                tw_hits = 0;
+
+            if (tw_hits >= 60) {
+                uint32_t sent = 0xc001080c;
+                uint32_t node;
+                int      n;
+                int      twsav = cpu_state.abrt;
+
+                uint32_t tcb = EDI;
+                char     tb[400];
+
+                tw_done = 1;
+                pclog("THREADWALK sentinel %08X  +0=%08X +4=%08X +8=%08X (0 nodes = list empty)\n",
+                      sent, readmemll(sent), readmemll(sent + 4), readmemll(sent + 8));
+
+                /* The System VM thread list turned out to be EMPTY at the wedge,
+                   so C0008F8A's cmp/jne passes and is not the wait. The loop that
+                   does not terminate walks a per-thread list: C0003221 loads
+                   [EDI+6Ch] with EDI a THCB, then follows ->next at +0 testing
+                   [node+8] & ECX. Dump the thread and that list instead. */
+                for (int i = 0; i < 128; i++)
+                    sprintf(tb + i * 3, "%02X ", readmembl(tcb + i));
+                pclog("THREADWALK tcb %08X (EDI) ecx=%08X | %s\n", tcb, ECX, tb);
+
+                node = readmemll(tcb + 0x6c);
+                pclog("THREADWALK list head [tcb+6Ch] = %08X\n", node);
+                for (n = 0; (n < 48) && node && (node != tcb); n++) {
+                    for (int i = 0; i < 48; i++)
+                        sprintf(tb + i * 3, "%02X ", readmembl(node + i));
+                    pclog("THREADWALK #%02i %08X flags=%08X | %s\n",
+                          n, node, readmemll(node + 8), tb);
+                    node = readmemll(node);
+                }
+                cpu_state.abrt = twsav;
+                pclog("THREADWALK end: %i nodes, last=%08X\n", n, node);
+            }
+        }
     }
 
     while (cycles > 0) {
@@ -1234,6 +1306,45 @@ exec386(int32_t cycs)
             int ins_fetch_fault = 0;
 #endif
             ins_cycles = cycles;
+
+            if (CS == 0x0028) {
+                if (cpu_state.pc == CT_SPIN)
+                    ct_spins++;
+                /* Keep the ring free of BOTH spinning clusters, so it holds the
+                   approach path rather than the cycle itself. */
+                if (((cpu_state.pc < 0xc0003140) || (cpu_state.pc > 0xc0003270)) &&
+                    ((cpu_state.pc < 0xc0008e20) || (cpu_state.pc > 0xc0009080))) {
+                    ct_ring[ct_pos % CT_RING] = cpu_state.pc;
+                    ct_eax[ct_pos % CT_RING]  = EAX;
+                    ct_pos++;
+                }
+            }
+            if ((ct_spins == CT_STUCK) && (ct_hits == 0)) {
+                ct_hits = 1;
+                pclog("WEDGED at %04X:%08X eax=%08X ebx=%08X ecx=%08X esi=%08X edi=%08X esp=%08X\n",
+                      CS, cpu_state.pc, EAX, EBX, ECX, ESI, EDI, ESP);
+                {
+                    int sv = cpu_state.abrt;
+                    static const uint32_t ct_zone[] = { 0xc0001420, 0xc0002bec0ULL & 0xffffffff, 0xc002ea20, 0xc002ca40, 0xc002bec0 };
+                    for (uint32_t z = 0; z < 5; z++)
+                    for (uint32_t q = ct_zone[z]; q < ct_zone[z] + 0x40; q += 16) {
+                        pclog("  code %08X:  %02X %02X %02X %02X %02X %02X %02X %02X "
+                              "%02X %02X %02X %02X %02X %02X %02X %02X\n", q,
+                              readmembl(q), readmembl(q+1), readmembl(q+2), readmembl(q+3),
+                              readmembl(q+4), readmembl(q+5), readmembl(q+6), readmembl(q+7),
+                              readmembl(q+8), readmembl(q+9), readmembl(q+10), readmembl(q+11),
+                              readmembl(q+12), readmembl(q+13), readmembl(q+14), readmembl(q+15));
+                    }
+                    pclog("  E9F0 = %02X %02X %02X %02X %02X %02X %02X %02X\n",
+                          readmembl(0xc000e9f0), readmembl(0xc000e9f1), readmembl(0xc000e9f2),
+                          readmembl(0xc000e9f3), readmembl(0xc000e9f4), readmembl(0xc000e9f5),
+                          readmembl(0xc000e9f6), readmembl(0xc000e9f7));
+                    cpu_state.abrt = sv;
+                }
+                for (uint32_t q = 0; q < CT_RING; q++)
+                    pclog("  path %02u  pc=%08X eax=%08X\n", q,
+                          ct_ring[(ct_pos + q) % CT_RING], ct_eax[(ct_pos + q) % CT_RING]);
+            }
 
             oldcs  = CS;
             oldcpl = CPL;
