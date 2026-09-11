@@ -119,6 +119,17 @@ typedef struct epat_s {
     uint8_t        port;
     uint8_t        no_drive; /* looked up once, and there was none */
 
+    /*
+     * Block mode. The CDB and all sector data move through register 7,
+     * which is NOT the task file's data register - it is the bridge's own
+     * streaming port, addressed without cont_map, and it has a protocol and
+     * an alternating phase bit of its own. epat.c's read_block/write_block.
+     */
+    int     block;       /* EPAT_BLOCK_NONE / _READ / _WRITE */
+    int     block_arm;   /* register 7 addressed, awaiting the w2 that starts it */
+    int     block_half;  /* 0 = the next status read returns the low nibble */
+    uint8_t block_latch; /* the byte being shifted out as two nibbles */
+
     /* Parallel-port pin state as the host last wrote it. */
     uint8_t data;    /* w0 */
     uint8_t ctrl;    /* w2 */
@@ -172,6 +183,17 @@ typedef struct epat_s {
 
 /* The only ATA command an ATAPI drive behind this bridge is given. */
 #define ATA_CMD_PACKET 0xA0
+
+/*
+ * epat.c addresses the streaming data port as a bare 7 to read and 0x67 to
+ * write, with no cont_map offset applied. It never moves data through the
+ * task file's own data register.
+ */
+#define EPAT_REG_BLOCK  0x07
+
+#define EPAT_BLOCK_NONE  0
+#define EPAT_BLOCK_READ  1
+#define EPAT_BLOCK_WRITE 2
 #define ATA_CDB_LEN    12
 
 #define ATA_ST_DRDY 0x40
@@ -465,6 +487,9 @@ epat_reg_read(epat_t *dev, const uint8_t addr)
 {
     epat_attach_drive(dev);
 
+    if ((dev->tf != NULL) && (addr == EPAT_REG_BLOCK))
+        return epat_data_read(dev);
+
     if ((dev->tf == NULL) || (addr < EPAT_REG_TASKFILE) ||
         (addr > (EPAT_REG_TASKFILE + ATA_STATUS)))
         return dev->regs[addr];
@@ -571,6 +596,24 @@ epat_write_data(uint8_t val, void *priv)
     if (!dev->connected)
         return;
 
+    /*
+     * Mid-block every data byte belongs to the stream. On the read side the
+     * host writes 0xFF to turn the bus around and 0xFD to flag the last byte;
+     * neither is data, and 0x00 ends the block.
+     */
+    if (dev->block == EPAT_BLOCK_WRITE) {
+        epat_data_write(dev, val);
+        return;
+    }
+
+    if (dev->block == EPAT_BLOCK_READ) {
+        if (val == 0x00) {
+            epat_log(dev->log, "block read done\n");
+            dev->block = EPAT_BLOCK_NONE;
+        }
+        return;
+    }
+
     if (dev->reg_write) {
         /* The value for the register addressed by the previous write. */
         dev->reg_write = 0;
@@ -583,6 +626,17 @@ epat_write_data(uint8_t val, void *priv)
                 epat_device_reset(dev);
         } else
             epat_log(dev->log, "W reg %02X out of range\n", dev->reg_addr);
+        return;
+    }
+
+    /* Register 7, tagged or bare, arms a block transfer rather than a register. */
+    if (val == (EPAT_WRITE_TAG | EPAT_REG_BLOCK)) {
+        dev->block_arm = EPAT_BLOCK_WRITE;
+        return;
+    }
+
+    if (val == EPAT_REG_BLOCK) {
+        dev->block_arm = EPAT_BLOCK_READ;
         return;
     }
 
@@ -625,6 +679,43 @@ epat_write_ctrl(uint8_t val, void *priv)
      * nibble. An unlock frame never writes 0x01, so seeing it both cancels any
      * partial frame match and starts the nibble sequence.
      */
+    /*
+     * w0(0x67); w2(1); w2(5)  starts a write block.
+     * w0(7);    w2(1); w2(3)  starts a read block.
+     * A write block ends on w2(7), a read block on w0(0) above.
+     */
+    if (dev->connected && (dev->block_arm != EPAT_BLOCK_NONE)) {
+        if ((dev->block_arm == EPAT_BLOCK_WRITE) && (val == 0x05)) {
+            dev->block     = EPAT_BLOCK_WRITE;
+            dev->block_arm = EPAT_BLOCK_NONE;
+            epat_log(dev->log, "block write start\n");
+            dev->ctrl = val;
+            return;
+        }
+
+        if ((dev->block_arm == EPAT_BLOCK_READ) && (val == 0x03)) {
+            dev->block      = EPAT_BLOCK_READ;
+            dev->block_arm  = EPAT_BLOCK_NONE;
+            dev->block_half = 0;
+            epat_log(dev->log, "block read start\n");
+            dev->ctrl = val;
+            return;
+        }
+    }
+
+    if ((dev->block == EPAT_BLOCK_WRITE) && (val == 0x07)) {
+        epat_log(dev->log, "block write done\n");
+        dev->block = EPAT_BLOCK_NONE;
+        dev->ctrl  = val;
+        return;
+    }
+
+    if (dev->block != EPAT_BLOCK_NONE) {
+        /* Mid-block the control port only carries the handshake phase. */
+        dev->ctrl = val;
+        return;
+    }
+
     if (dev->connected && (val == 0x01)) {
         dev->ustate    = EPAT_UNLOCK_IDLE;
         dev->upos      = 0;
@@ -647,6 +738,25 @@ epat_read_status(void *priv)
     /* Mid-handshake the checkpoints take priority over any register value. */
     if ((dev->ustate != EPAT_UNLOCK_IDLE) || !dev->connected)
         return dev->status;
+
+    if (dev->block == EPAT_BLOCK_READ) {
+        if (dev->block_half) {
+            dev->block_half = 0;
+            /* j44 takes the high nibble from the second read, unshifted. */
+            return dev->block_latch & 0xF0;
+        }
+
+        dev->block_latch = epat_data_read(dev);
+        dev->block_half  = 1;
+
+        /*
+         * The low nibble is returned in the TOP four bits, and bit 3 MUST be
+         * clear: epat_read_block treats a set bit 3 as "that read carried the
+         * whole byte" and skips the second one, which would corrupt every
+         * byte read. EPAT_STAT_IDLE has bit 3 set, so it cannot be used here.
+         */
+        return (uint8_t) ((dev->block_latch & 0x0F) << 4);
+    }
 
     if (dev->reg_addr >= sizeof(dev->regs))
         return dev->status;
