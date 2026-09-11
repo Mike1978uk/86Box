@@ -32,6 +32,37 @@
 #include <86box/device.h>
 #include <86box/lpt.h>
 #include <86box/plat_unused.h>
+#include <86box/log.h>
+
+/*
+ * The whole reason for modelling this bridge is VISIBILITY. On real hardware a
+ * driver bug surfaces as "36 zeros" or "media is not formatted" and costs a
+ * boot to narrow. Here the bridge is on both sides of the conversation, so it
+ * can say what the host asked for AND what the protocol expected - which turns
+ * a day of bisecting into one log line.
+ *
+ * Every failure this project spent 2026-09-11 on is a one-liner from in here:
+ * the CDB written as twelve register writes instead of a block write; a command
+ * refused with a unit attention nobody had cleared; a host reading the length
+ * it asked for rather than the count the device offered.
+ */
+#define ENABLE_EPAT_LOG 1
+#ifdef ENABLE_EPAT_LOG
+int epat_do_log = ENABLE_EPAT_LOG;
+
+static void
+epat_log(void *priv, const char *fmt, ...)
+{
+    if (epat_do_log) {
+        va_list ap;
+        va_start(ap, fmt);
+        log_out(priv, fmt, ap);
+        va_end(ap);
+    }
+}
+#else
+#    define epat_log(priv, fmt, ...)
+#endif
 
 /*
  * The unlock frame. Eight bytes to the data port, each written TWICE - the
@@ -71,6 +102,7 @@ typedef enum {
 
 typedef struct epat_s {
     void *lpt;
+    void *log;
 
     /* Parallel-port pin state as the host last wrote it. */
     uint8_t data;    /* w0 */
@@ -129,6 +161,9 @@ epat_unlock_feed(epat_t *dev, uint8_t val)
      * A mismatch restarts the match rather than aborting it - the first byte
      * of a new frame can arrive immediately after a failed one.
      */
+    if (dev->ustate == EPAT_UNLOCK_RUN)
+        epat_log(dev->log, "unlock frame broken at byte %i: got %02X, expected %02X\n",
+                 dev->upos, val, epat_unlock[dev->upos]);
     dev->upos   = (val == epat_unlock[0]) ? 1 : 0;
     dev->ustate = dev->upos ? EPAT_UNLOCK_RUN : EPAT_UNLOCK_IDLE;
     return 0;
@@ -156,10 +191,14 @@ epat_write_ctrl(uint8_t val, void *priv)
         if (dev->ucmd == EPAT_CPP_CONNECT) {
             dev->connected = 1;
             dev->status    = EPAT_STAT_IDLE;
+            epat_log(dev->log, "CONNECT\n");
         } else if (dev->ucmd == EPAT_CPP_DISCONNECT) {
             dev->connected = 0;
             dev->status    = EPAT_STAT_IDLE;
-        }
+            epat_log(dev->log, "DISCONNECT\n");
+        } else
+            epat_log(dev->log, "unlock frame committed with unknown command %02X\n",
+                     dev->ucmd);
         dev->ucmd = 0;
         dev->upos = 0;
     }
@@ -192,6 +231,7 @@ epat_init(UNUSED(const device_t *info))
         return NULL;
 
     dev->status = EPAT_STAT_IDLE;
+    dev->log    = log_open("EPAT");
 
     dev->lpt = lpt_attach_ex(device_get_config_int("port"),
                              epat_write_data, epat_write_ctrl, NULL,
@@ -206,8 +246,11 @@ epat_close(void *priv)
 {
     epat_t *dev = (epat_t *) priv;
 
-    if (dev != NULL)
+    if (dev != NULL) {
+        if (dev->log != NULL)
+            log_close(dev->log);
         free(dev);
+    }
 }
 
 static const device_config_t epat_config[] = {
