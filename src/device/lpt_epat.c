@@ -567,8 +567,19 @@ epat_device_reset(epat_t *dev)
      * request_length = 0xEB14, which is that signature, so the values above
      * only apply when the bridge is running without a drive.
      */
-    if (epat_attach_drive(dev))
+    if (epat_attach_drive(dev)) {
         dev->sd->reset(dev->sd->sc);
+
+        /*
+         * A real drive raises a unit attention when it is reset, and the
+         * physical LS-120 demonstrably does: after this same SRST it answers
+         * the next READ with sense key 6. rdisk_reset() clears the flag, so
+         * without this the emulated drive is more forgiving than the real one
+         * and a driver that mishandles the condition would pass here and fail
+         * on hardware. rdisk already implements the rest, ALLOW_UA included.
+         */
+        ((rdisk_t *) dev->sd->sc)->unit_attention = 1;
+    }
 
     epat_log(dev->log, "device reset: status %02X, signature %02X %02X\n",
              dev->regs[EPAT_REG_TASKFILE + ATA_STATUS], ATAPI_SIG_LO, ATAPI_SIG_HI);
