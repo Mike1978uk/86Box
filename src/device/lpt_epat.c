@@ -117,6 +117,7 @@ typedef struct epat_s {
     scsi_device_t *sd;
     ide_tf_t      *tf;
     uint8_t        port;
+    uint8_t        no_drive; /* looked up once, and there was none */
 
     /* Parallel-port pin state as the host last wrote it. */
     uint8_t data;    /* w0 */
@@ -144,6 +145,7 @@ typedef struct epat_s {
      *   write: w0(0x60 + r); w2(1); w0(val); w2(4)
      */
     uint8_t reg_addr;   /* register the host last addressed */
+    uint8_t reg_latch;  /* value fetched when the low nibble was asked for */
     int     reg_write;  /* the 0x60 tag was set - a value byte is coming */
     int     nibble_hi;  /* 0 = next status read returns the low nibble */
 
@@ -167,6 +169,10 @@ typedef struct epat_s {
 #define ATA_BCHI     5
 #define ATA_DRVHD    6
 #define ATA_STATUS   7
+
+/* The only ATA command an ATAPI drive behind this bridge is given. */
+#define ATA_CMD_PACKET 0xA0
+#define ATA_CDB_LEN    12
 
 #define ATA_ST_DRDY 0x40
 #define ATA_ST_DSC  0x10
@@ -226,19 +232,246 @@ epat_unlock_feed(epat_t *dev, uint8_t val)
 }
 
 /*
+ * Find the drive assigned to this port.
+ *
+ * This cannot be done at init: 86box.c runs lpt_devices_init() well before
+ * rdisk_hard_reset(), so at the time this device is created no removable disk
+ * exists yet. Moving rdisk_hard_reset() earlier is not an option either - it
+ * attaches SCSI drives and so must follow scsi_card_init(), which is itself
+ * after the parallel devices. So the lookup is done on first use and cached.
+ *
+ * With no drive assigned the bridge answers from its own regs[], which keeps
+ * the wire protocol testable on its own.
+ */
+static int
+epat_attach_drive(epat_t *dev)
+{
+    if (dev->sd != NULL)
+        return 1;
+
+    if (dev->no_drive)
+        return 0;
+
+    dev->sd = rdisk_get_lpt_device(dev->port);
+
+    if (dev->sd == NULL) {
+        dev->no_drive = 1;
+        epat_log(dev->log, "no removable disk assigned to LPT%i - "
+                           "answering from the bridge's own registers\n",
+                 dev->port + 1);
+        return 0;
+    }
+
+    dev->tf = ((rdisk_t *) dev->sd->sc)->tf;
+    epat_log(dev->log, "LPT%i drive attached\n", dev->port + 1);
+
+    return 1;
+}
+
+/*
+ * The packet phase engine, transliterated from ide_atapi_callback() and
+ * ide_atapi_pio_request() in hdc_ide.c. The drive is an ordinary ATAPI device;
+ * all that differs is that its task file and data register are reached a nibble
+ * at a time down a parallel cable instead of over the ISA bus.
+ *
+ * Two deliberate departures from the IDE path:
+ *
+ *   - No interrupts. The Shuttle bridges here run polled - the real machine
+ *     measures dmaEn = 0 - and the driver polls BSY and DRQ.
+ *   - No callback timing. The IDE controller arms a timer for the delay the
+ *     drive asks for; the bridge completes immediately, because one byte over
+ *     this link costs far more than any seek that delay models. This does mean
+ *     a spin-up wait is not reproduced, which is worth remembering when using
+ *     the bridge to test a driver's timeouts.
+ */
+static void epat_pio_request(epat_t *dev, int out);
+
+static void
+epat_atapi_callback(epat_t *dev)
+{
+    scsi_common_t *sc = dev->sd->sc;
+
+    switch (sc->packet_status) {
+        default:
+            break;
+
+        case PHASE_IDLE:
+            dev->tf->pos     = 0;
+            dev->tf->phase   = 1;
+            dev->tf->atastat = READY_STAT | DRQ_STAT | (dev->tf->atastat & ERR_STAT);
+            break;
+
+        case PHASE_COMMAND:
+            dev->tf->atastat = BUSY_STAT | (dev->tf->atastat & ERR_STAT);
+            dev->sd->command(sc, sc->atapi_cdb);
+            /*
+             * Whatever delay the drive asked for is discarded, and the phase it
+             * moved to is acted on now. rdisk_set_callback() is a no-op for an
+             * LPT drive, so nothing else would ever run this.
+             */
+            sc->callback = 0.0;
+            if (sc->packet_status != PHASE_COMMAND)
+                epat_atapi_callback(dev);
+            break;
+
+        case PHASE_COMPLETE:
+        case PHASE_ERROR:
+            dev->tf->atastat = READY_STAT;
+            if (sc->packet_status == PHASE_ERROR)
+                dev->tf->atastat |= ERR_STAT;
+            dev->tf->phase    = 3;
+            sc->packet_status = PHASE_NONE;
+            epat_log(dev->log, "command done, status %02X\n", dev->tf->atastat);
+            break;
+
+        case PHASE_DATA_IN:
+        case PHASE_DATA_OUT:
+            dev->tf->atastat = READY_STAT | DRQ_STAT | (dev->tf->atastat & ERR_STAT);
+            /* PHASE_DATA_IN gives ireason 2 (I/O set), PHASE_DATA_OUT gives 0. */
+            dev->tf->phase   = !(sc->packet_status & 0x01) << 1;
+            epat_log(dev->log, "data phase %s, %u bytes, request length %u\n",
+                     (sc->packet_status == PHASE_DATA_IN) ? "in" : "out",
+                     sc->packet_len, dev->tf->request_length);
+            break;
+    }
+}
+
+/* A transfer has reached the end of a block, or of the whole command. */
+static void
+epat_pio_request(epat_t *dev, const int out)
+{
+    scsi_common_t *sc = dev->sd->sc;
+
+    dev->tf->atastat = BUSY_STAT;
+
+    if (dev->tf->pos >= sc->packet_len) {
+        dev->tf->pos    = 0;
+        sc->request_pos = 0;
+
+        if (out)
+            dev->sd->phase_data_out(sc);
+        else
+            dev->sd->command_stop(sc);
+
+        sc->callback = 0.0;
+        if (sc->packet_status == PHASE_COMPLETE)
+            epat_atapi_callback(dev);
+    } else {
+        /* Short tail: tell the host how much is actually left. */
+        if ((sc->packet_len - dev->tf->pos) < sc->max_transfer_len) {
+            sc->max_transfer_len    = (uint16_t) (sc->packet_len - dev->tf->pos);
+            dev->tf->request_length = sc->max_transfer_len;
+        }
+
+        sc->packet_status = PHASE_DATA_IN | out;
+        epat_atapi_callback(dev);
+        sc->request_pos = 0;
+    }
+}
+
+/*
+ * The data register. The bridge is a byte-wide link, so unlike the IDE path
+ * this moves one byte per access rather than a word.
+ */
+static uint8_t
+epat_data_read(epat_t *dev)
+{
+    scsi_common_t *sc = dev->sd->sc;
+    uint8_t        ret;
+
+    if ((sc->temp_buffer == NULL) || (sc->packet_status != PHASE_DATA_IN))
+        return 0;
+
+    /*
+     * Reading past the buffer returns zero rather than reading off the end:
+     * a command with an allocation length below one sector leaves the host
+     * asking for more than the drive prepared.
+     */
+    ret = (dev->tf->pos < sc->packet_len) ? sc->temp_buffer[dev->tf->pos] : 0;
+    dev->tf->pos++;
+    sc->request_pos++;
+
+    if ((sc->request_pos >= sc->max_transfer_len) || (dev->tf->pos >= sc->packet_len))
+        epat_pio_request(dev, 0);
+
+    return ret;
+}
+
+static void
+epat_data_write(epat_t *dev, const uint8_t val)
+{
+    scsi_common_t *sc  = dev->sd->sc;
+    uint8_t       *buf = NULL;
+
+    /* Before a command is assembled the data register carries the CDB. */
+    if (sc->packet_status == PHASE_IDLE)
+        buf = sc->atapi_cdb;
+    else if (sc->packet_status == PHASE_DATA_OUT)
+        buf = sc->temp_buffer;
+
+    if (buf == NULL)
+        return;
+
+    buf[dev->tf->pos] = val;
+    dev->tf->pos++;
+    sc->request_pos++;
+
+    if (sc->packet_status == PHASE_DATA_OUT) {
+        if ((sc->request_pos >= sc->max_transfer_len) ||
+            (dev->tf->pos >= sc->packet_len))
+            epat_pio_request(dev, 1);
+    } else if (dev->tf->pos >= ATA_CDB_LEN) {
+        epat_log(dev->log, "CDB %02X %02X %02X %02X %02X %02X "
+                           "%02X %02X %02X %02X %02X %02X\n",
+                 buf[0], buf[1], buf[2],  buf[3],  buf[4],  buf[5],
+                 buf[6], buf[7], buf[8],  buf[9],  buf[10], buf[11]);
+
+        dev->tf->pos      = 0;
+        dev->tf->atastat  = BUSY_STAT;
+        sc->packet_status = PHASE_COMMAND;
+        epat_atapi_callback(dev);
+    }
+}
+
+/* A write to the command register. PACKET is the only one that means anything. */
+static void
+epat_command(epat_t *dev, const uint8_t cmd)
+{
+    scsi_common_t *sc = dev->sd->sc;
+
+    if (cmd != ATA_CMD_PACKET) {
+        epat_log(dev->log, "command %02X is not PACKET, aborting\n", cmd);
+        dev->tf->atastat = READY_STAT | ERR_STAT | ATA_ST_DSC;
+        dev->tf->error   = ABRT_ERR;
+        return;
+    }
+
+    epat_log(dev->log, "PACKET, byte count %u\n", dev->tf->request_length);
+
+    dev->tf->pos      = 0;
+    sc->packet_status = PHASE_IDLE;
+    dev->tf->phase    = 1; /* ireason 1: the drive wants the CDB */
+    dev->tf->atastat  = READY_STAT | DRQ_STAT;
+}
+
+/*
  * The ATA task file belongs to the drive, not to the bridge. These map the
  * eight task-file offsets onto ide_tf_t, which is the same structure the IDE
  * controller drives the drive through. Offsets outside the task file (device
  * control, and the bridge's own registers) stay in regs[].
  */
 static uint8_t
-epat_reg_read(const epat_t *dev, const uint8_t addr)
+epat_reg_read(epat_t *dev, const uint8_t addr)
 {
+    epat_attach_drive(dev);
+
     if ((dev->tf == NULL) || (addr < EPAT_REG_TASKFILE) ||
         (addr > (EPAT_REG_TASKFILE + ATA_STATUS)))
         return dev->regs[addr];
 
     switch (addr - EPAT_REG_TASKFILE) {
+        case ATA_DATA:
+            return epat_data_read(dev);
         case ATA_ERROR:
             return dev->tf->error;
         case ATA_IREASON:
@@ -261,11 +494,16 @@ epat_reg_write(epat_t *dev, const uint8_t addr, const uint8_t val)
 {
     dev->regs[addr] = val;
 
+    epat_attach_drive(dev);
+
     if ((dev->tf == NULL) || (addr < EPAT_REG_TASKFILE) ||
         (addr > (EPAT_REG_TASKFILE + ATA_STATUS)))
         return;
 
     switch (addr - EPAT_REG_TASKFILE) {
+        case ATA_DATA:
+            epat_data_write(dev, val);
+            break;
         case ATA_ERROR:
             dev->tf->features = val;
             break;
@@ -281,6 +519,9 @@ epat_reg_write(epat_t *dev, const uint8_t addr, const uint8_t val)
             break;
         case ATA_DRVHD:
             dev->tf->drvsel = val;
+            break;
+        case ATA_STATUS: /* the command register, on a write */
+            epat_command(dev, val);
             break;
         default:
             break;
@@ -301,7 +542,7 @@ epat_device_reset(epat_t *dev)
      * request_length = 0xEB14, which is that signature, so the values above
      * only apply when the bridge is running without a drive.
      */
-    if (dev->sd != NULL)
+    if (epat_attach_drive(dev))
         dev->sd->reset(dev->sd->sc);
 
     epat_log(dev->log, "device reset: status %02X, signature %02X %02X\n",
@@ -410,7 +651,14 @@ epat_read_status(void *priv)
     if (dev->reg_addr >= sizeof(dev->regs))
         return dev->status;
 
-    val = epat_reg_read(dev, dev->reg_addr);
+    /*
+     * A byte is fetched once and shifted out as two nibbles. Fetching it again
+     * for the high nibble would advance the data register twice per byte.
+     */
+    if (!dev->nibble_hi)
+        dev->reg_latch = epat_reg_read(dev, dev->reg_addr);
+
+    val = dev->reg_latch;
 
     /*
      * j44(a, b) = ((a >> 4) & 0x0f) | (b & 0xf0), so each nibble must arrive in
@@ -448,15 +696,7 @@ epat_init(UNUSED(const device_t *info))
     dev->log    = log_open("EPAT");
     dev->port   = (uint8_t) device_get_config_int("port");
 
-    dev->sd = rdisk_get_lpt_device(dev->port);
-    if (dev->sd == NULL)
-        epat_log(dev->log, "no removable disk assigned to LPT%i - "
-                           "the bridge will answer from its own registers\n",
-                 dev->port + 1);
-    else {
-        dev->tf = ((rdisk_t *) dev->sd->sc)->tf;
-        epat_log(dev->log, "LPT%i drive attached\n", dev->port + 1);
-    }
+    /* The drive does not exist yet - see epat_attach_drive(). */
 
     dev->lpt = lpt_attach_ex(device_get_config_int("port"),
                              epat_write_data, epat_write_ctrl, NULL,
