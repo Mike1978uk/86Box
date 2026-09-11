@@ -31,6 +31,10 @@
 #include <86box/timer.h>
 #include <86box/device.h>
 #include <86box/lpt.h>
+#include <86box/scsi.h>
+#include <86box/scsi_device.h>
+#include <86box/hdc_ide.h>
+#include <86box/rdisk.h>
 #include <86box/plat_unused.h>
 #include <86box/log.h>
 
@@ -103,6 +107,16 @@ typedef enum {
 typedef struct epat_s {
     void *lpt;
     void *log;
+
+    /*
+     * The drive this bridge fronts, or NULL when no removable disk is
+     * assigned to this parallel port. With no drive the bridge still speaks
+     * the protocol against its own regs[], which is useful for testing the
+     * wire format on its own.
+     */
+    scsi_device_t *sd;
+    ide_tf_t      *tf;
+    uint8_t        port;
 
     /* Parallel-port pin state as the host last wrote it. */
     uint8_t data;    /* w0 */
@@ -211,6 +225,68 @@ epat_unlock_feed(epat_t *dev, uint8_t val)
     return 0;
 }
 
+/*
+ * The ATA task file belongs to the drive, not to the bridge. These map the
+ * eight task-file offsets onto ide_tf_t, which is the same structure the IDE
+ * controller drives the drive through. Offsets outside the task file (device
+ * control, and the bridge's own registers) stay in regs[].
+ */
+static uint8_t
+epat_reg_read(const epat_t *dev, const uint8_t addr)
+{
+    if ((dev->tf == NULL) || (addr < EPAT_REG_TASKFILE) ||
+        (addr > (EPAT_REG_TASKFILE + ATA_STATUS)))
+        return dev->regs[addr];
+
+    switch (addr - EPAT_REG_TASKFILE) {
+        case ATA_ERROR:
+            return dev->tf->error;
+        case ATA_IREASON:
+            return dev->tf->phase;
+        case ATA_BCLO:
+            return dev->tf->request_length & 0xff;
+        case ATA_BCHI:
+            return (dev->tf->request_length >> 8) & 0xff;
+        case ATA_DRVHD:
+            return dev->tf->drvsel;
+        case ATA_STATUS:
+            return dev->tf->atastat;
+        default:
+            return dev->regs[addr];
+    }
+}
+
+static void
+epat_reg_write(epat_t *dev, const uint8_t addr, const uint8_t val)
+{
+    dev->regs[addr] = val;
+
+    if ((dev->tf == NULL) || (addr < EPAT_REG_TASKFILE) ||
+        (addr > (EPAT_REG_TASKFILE + ATA_STATUS)))
+        return;
+
+    switch (addr - EPAT_REG_TASKFILE) {
+        case ATA_ERROR:
+            dev->tf->features = val;
+            break;
+        case ATA_IREASON:
+            dev->tf->phase = val;
+            break;
+        case ATA_BCLO:
+            dev->tf->request_length = (dev->tf->request_length & 0xff00) | val;
+            break;
+        case ATA_BCHI:
+            dev->tf->request_length = (dev->tf->request_length & 0x00ff) |
+                                      ((uint16_t) val << 8);
+            break;
+        case ATA_DRVHD:
+            dev->tf->drvsel = val;
+            break;
+        default:
+            break;
+    }
+}
+
 /* Present the drive as it is immediately after a reset. */
 static void
 epat_device_reset(epat_t *dev)
@@ -219,6 +295,15 @@ epat_device_reset(epat_t *dev)
     dev->regs[EPAT_REG_TASKFILE + ATA_STATUS] = ATA_ST_DRDY | ATA_ST_DSC;
     dev->regs[EPAT_REG_TASKFILE + ATA_BCLO]   = ATAPI_SIG_LO;
     dev->regs[EPAT_REG_TASKFILE + ATA_BCHI]   = ATAPI_SIG_HI;
+
+    /*
+     * A real drive sets its own signature here. rdisk_reset() writes
+     * request_length = 0xEB14, which is that signature, so the values above
+     * only apply when the bridge is running without a drive.
+     */
+    if (dev->sd != NULL)
+        dev->sd->reset(dev->sd->sc);
+
     epat_log(dev->log, "device reset: status %02X, signature %02X %02X\n",
              dev->regs[EPAT_REG_TASKFILE + ATA_STATUS], ATAPI_SIG_LO, ATAPI_SIG_HI);
 }
@@ -249,7 +334,7 @@ epat_write_data(uint8_t val, void *priv)
         /* The value for the register addressed by the previous write. */
         dev->reg_write = 0;
         if (dev->reg_addr < sizeof(dev->regs)) {
-            dev->regs[dev->reg_addr] = val;
+            epat_reg_write(dev, dev->reg_addr, val);
             epat_log(dev->log, "W reg %02X = %02X\n", dev->reg_addr, val);
 
             /* SRST asserted then released is how a cold drive is brought up. */
@@ -325,7 +410,7 @@ epat_read_status(void *priv)
     if (dev->reg_addr >= sizeof(dev->regs))
         return dev->status;
 
-    val = dev->regs[dev->reg_addr];
+    val = epat_reg_read(dev, dev->reg_addr);
 
     /*
      * j44(a, b) = ((a >> 4) & 0x0f) | (b & 0xf0), so each nibble must arrive in
@@ -361,6 +446,17 @@ epat_init(UNUSED(const device_t *info))
 
     dev->status = EPAT_STAT_IDLE;
     dev->log    = log_open("EPAT");
+    dev->port   = (uint8_t) device_get_config_int("port");
+
+    dev->sd = rdisk_get_lpt_device(dev->port);
+    if (dev->sd == NULL)
+        epat_log(dev->log, "no removable disk assigned to LPT%i - "
+                           "the bridge will answer from its own registers\n",
+                 dev->port + 1);
+    else {
+        dev->tf = ((rdisk_t *) dev->sd->sc)->tf;
+        epat_log(dev->log, "LPT%i drive attached\n", dev->port + 1);
+    }
 
     dev->lpt = lpt_attach_ex(device_get_config_int("port"),
                              epat_write_data, epat_write_ctrl, NULL,
