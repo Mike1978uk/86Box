@@ -117,7 +117,49 @@ typedef struct epat_s {
     uint8_t             ucmd;     /* the command byte once the preamble matched */
 
     int connected;
+
+    /*
+     * Register access. The host addresses a register by writing its number to
+     * the DATA port - directly, as regr + cont_map[cont]; there is no index/data
+     * pair. A write tags the number with 0x60; a read sends it bare. The value
+     * then comes back as two nibbles, each arriving in the TOP four bits of the
+     * status port across two control-port strobes.
+     *
+     *   read : w0(r); w2(1); w2(3); a = r1(); w2(4); b = r1();
+     *          value = ((a >> 4) & 0x0f) | (b & 0xf0)
+     *   write: w0(0x60 + r); w2(1); w0(val); w2(4)
+     */
+    uint8_t reg_addr;   /* register the host last addressed */
+    int     reg_write;  /* the 0x60 tag was set - a value byte is coming */
+    int     nibble_hi;  /* 0 = next status read returns the low nibble */
+
+    /*
+     * cont_map = { 0x18, 0x10, 0 }: the ATA task file lives at 0x18, device
+     * control at 0x16, and the bridge's own registers at 0x00. One flat array
+     * is simpler than three and the addresses do not overlap.
+     */
+    uint8_t regs[0x20];
 } epat_t;
+
+#define EPAT_REG_TASKFILE 0x18 /* cont 0 */
+#define EPAT_REG_DEVCTL   0x16 /* cont 1 + 6 */
+#define EPAT_WRITE_TAG    0x60
+
+/* ATA/ATAPI task-file offsets, relative to EPAT_REG_TASKFILE. */
+#define ATA_DATA     0
+#define ATA_ERROR    1
+#define ATA_IREASON  2
+#define ATA_BCLO     4
+#define ATA_BCHI     5
+#define ATA_DRVHD    6
+#define ATA_STATUS   7
+
+#define ATA_ST_DRDY 0x40
+#define ATA_ST_DSC  0x10
+
+/* The ATAPI signature a device reports after a reset: 14 EB in LBA mid/high. */
+#define ATAPI_SIG_LO 0x14
+#define ATAPI_SIG_HI 0xEB
 
 /*
  * The preamble is written as pairs. Fold a repeat of the byte we just saw
@@ -169,13 +211,62 @@ epat_unlock_feed(epat_t *dev, uint8_t val)
     return 0;
 }
 
+/* Present the drive as it is immediately after a reset. */
+static void
+epat_device_reset(epat_t *dev)
+{
+    memset(dev->regs, 0x00, sizeof(dev->regs));
+    dev->regs[EPAT_REG_TASKFILE + ATA_STATUS] = ATA_ST_DRDY | ATA_ST_DSC;
+    dev->regs[EPAT_REG_TASKFILE + ATA_BCLO]   = ATAPI_SIG_LO;
+    dev->regs[EPAT_REG_TASKFILE + ATA_BCHI]   = ATAPI_SIG_HI;
+    epat_log(dev->log, "device reset: status %02X, signature %02X %02X\n",
+             dev->regs[EPAT_REG_TASKFILE + ATA_STATUS], ATAPI_SIG_LO, ATAPI_SIG_HI);
+}
+
 static void
 epat_write_data(uint8_t val, void *priv)
 {
     epat_t *dev = (epat_t *) priv;
 
     dev->data = val;
+
     epat_unlock_feed(dev, val);
+
+    /*
+     * While an unlock frame is being matched, or one is committed but waiting
+     * for its nINIT pulse, these bytes are frame content and not register
+     * addresses. A register number that happens to equal 0x22 would start the
+     * recogniser spuriously; epat_write_ctrl cancels a partial match the moment
+     * it sees w2(1), which an unlock frame never issues.
+     */
+    if ((dev->ustate != EPAT_UNLOCK_IDLE) || dev->ucmd)
+        return;
+
+    if (!dev->connected)
+        return;
+
+    if (dev->reg_write) {
+        /* The value for the register addressed by the previous write. */
+        dev->reg_write = 0;
+        if (dev->reg_addr < sizeof(dev->regs)) {
+            dev->regs[dev->reg_addr] = val;
+            epat_log(dev->log, "W reg %02X = %02X\n", dev->reg_addr, val);
+
+            /* SRST asserted then released is how a cold drive is brought up. */
+            if ((dev->reg_addr == EPAT_REG_DEVCTL) && !(val & 0x04))
+                epat_device_reset(dev);
+        } else
+            epat_log(dev->log, "W reg %02X out of range\n", dev->reg_addr);
+        return;
+    }
+
+    if (val & EPAT_WRITE_TAG) {
+        dev->reg_addr  = val & ~EPAT_WRITE_TAG;
+        dev->reg_write = 1;
+    } else {
+        dev->reg_addr  = val;
+        dev->nibble_hi = 0;
+    }
 }
 
 static void
@@ -203,15 +294,53 @@ epat_write_ctrl(uint8_t val, void *priv)
         dev->upos = 0;
     }
 
+    /*
+     * A register read strobes w2(1) then w2(3), then w2(4) for the second
+     * nibble. An unlock frame never writes 0x01, so seeing it both cancels any
+     * partial frame match and starts the nibble sequence.
+     */
+    if (dev->connected && (val == 0x01)) {
+        dev->ustate    = EPAT_UNLOCK_IDLE;
+        dev->upos      = 0;
+        dev->nibble_hi = 0;
+    } else if (dev->connected && (val == 0x03))
+        dev->nibble_hi = 0; /* first read returns the LOW nibble */
+    else if (dev->connected && (val == 0x04) && !dev->ucmd)
+        dev->nibble_hi = 1; /* second read returns the HIGH nibble */
+
     dev->ctrl = val;
 }
 
 static uint8_t
 epat_read_status(void *priv)
 {
-    const epat_t *dev = (epat_t *) priv;
+    epat_t *dev = (epat_t *) priv;
+    uint8_t val;
+    uint8_t ret;
 
-    return dev->status;
+    /* Mid-handshake the checkpoints take priority over any register value. */
+    if ((dev->ustate != EPAT_UNLOCK_IDLE) || !dev->connected)
+        return dev->status;
+
+    if (dev->reg_addr >= sizeof(dev->regs))
+        return dev->status;
+
+    val = dev->regs[dev->reg_addr];
+
+    /*
+     * j44(a, b) = ((a >> 4) & 0x0f) | (b & 0xf0), so each nibble must arrive in
+     * the TOP four bits. The low four are not used by the combine; the bridge
+     * drives them from its own state and the driver ignores them.
+     */
+    if (dev->nibble_hi)
+        ret = (val & 0xF0) | (EPAT_STAT_IDLE & 0x0F);
+    else
+        ret = (uint8_t) ((val & 0x0F) << 4) | (EPAT_STAT_IDLE & 0x0F);
+
+    epat_log(dev->log, "R reg %02X %s nibble -> %02X (value %02X)\n",
+             dev->reg_addr, dev->nibble_hi ? "high" : "low", ret, val);
+
+    return ret;
 }
 
 static uint8_t
