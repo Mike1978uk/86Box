@@ -673,7 +673,23 @@ epat_write_data(uint8_t val, void *priv)
 
     dev->data = val;
 
-    epat_unlock_feed(dev, val);
+    /*
+     * NEVER feed block payload to the unlock recogniser. Inside a block the
+     * bytes are user data and may legitimately be anything - including 0x22,
+     * the first byte of an unlock frame. Feeding them starts a spurious match,
+     * and the early return below then SWALLOWS the byte, so the stream loses
+     * one byte per 0x22 in the payload, never reaches the expected length, and
+     * the command never completes: DRQ stays asserted and the driver polls
+     * forever.
+     *
+     * Reads could not hit this because the host only ever writes control bytes
+     * (0xFF turnaround, 0xFD last-byte, 0x00 end) on that path - only a WRITE
+     * pushes arbitrary payload through the data port. Found 2026-09-13 on the
+     * first real WRITE(10) this bridge has ever carried:
+     *   "unlock frame broken at byte 1: got 00, expected AA" mid-block.
+     */
+    if (dev->block == EPAT_BLOCK_NONE)
+        epat_unlock_feed(dev, val);
 
     /*
      * While an unlock frame is being matched, or one is committed but waiting
