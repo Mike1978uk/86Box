@@ -333,6 +333,32 @@ epat_busy_done(void *priv)
     epat_atapi_callback(dev);
 }
 
+/*
+ * Does this command move the mechanism? INQUIRY, REQUEST SENSE and MODE SENSE
+ * are answered out of drive firmware and come back promptly on the real LS-120;
+ * anything that reads, writes or positions the medium pays the spin-up. Modelling
+ * one latency for every command stalls enumeration, which the drive does not do -
+ * on the real 5160 it enumerates and gets a drive letter, then hangs on the first
+ * read. Keeping INQUIRY fast is what reproduces that.
+ */
+static int
+epat_cdb_touches_media(uint8_t op)
+{
+    switch (op) {
+        case 0x08: /* READ(6)        */
+        case 0x0a: /* WRITE(6)       */
+        case 0x1b: /* START STOP UNIT*/
+        case 0x25: /* READ CAPACITY  */
+        case 0x28: /* READ(10)       */
+        case 0x2a: /* WRITE(10)      */
+        case 0x2f: /* VERIFY(10)     */
+        case 0x35: /* SYNCHRONIZE CACHE */
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 static void
 epat_atapi_callback(epat_t *dev)
 {
@@ -369,7 +395,8 @@ epat_atapi_callback(epat_t *dev)
              * never goes busy at all and a driver's ready-poll is never
              * exercised.
              */
-            if ((dev->busy_us > 0) && !dev->busy_pending) {
+            if ((dev->busy_us > 0) && !dev->busy_pending &&
+                epat_cdb_touches_media(sc->atapi_cdb[0])) {
                 dev->busy_pending = 1;
                 dev->tf->atastat  = BUSY_STAT | (dev->tf->atastat & ERR_STAT);
                 timer_set_delay_u64(&dev->busy_timer,
