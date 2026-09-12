@@ -166,6 +166,21 @@ typedef struct epat_s {
      * is simpler than three and the addresses do not overlap.
      */
     uint8_t regs[0x20];
+
+    /*
+     * Drive latency. The real MATSHITA LS-120 goes BSY when a command
+     * completes and stays there for a while: measured 2026-09-12 on the 5160,
+     * an INQUIRY leaves status 80 with a clean error register, still set after
+     * the probe's ~0.5 s wait, and settled to 50 by the next command. The
+     * emulated drive answers instantly, which is why a driver that works here
+     * can still time out on hardware - see the LS-120 miniport, Init Success
+     * in the bed against Init Failure on the bench.
+     *
+     * busy_us 0 keeps the original instant behaviour.
+     */
+    pc_timer_t busy_timer;
+    int        busy_us;
+    int        busy_pending; /* the BSY window has been served for this command */
 } epat_t;
 
 #define EPAT_REG_TASKFILE 0x18 /* cont 0 */
@@ -307,6 +322,16 @@ epat_attach_drive(epat_t *dev)
  *     the bridge to test a driver's timeouts.
  */
 static void epat_pio_request(epat_t *dev, int out);
+static void epat_atapi_callback(epat_t *dev);
+
+/* The BSY window has expired - finish the command the drive was sitting on. */
+static void
+epat_busy_done(void *priv)
+{
+    epat_t *dev = (epat_t *) priv;
+
+    epat_atapi_callback(dev);
+}
 
 static void
 epat_atapi_callback(epat_t *dev)
@@ -338,6 +363,22 @@ epat_atapi_callback(epat_t *dev)
 
         case PHASE_COMPLETE:
         case PHASE_ERROR:
+            /*
+             * Hold BSY for the configured drive latency before reporting the
+             * result, the way the real drive does. Without this the bridge
+             * never goes busy at all and a driver's ready-poll is never
+             * exercised.
+             */
+            if ((dev->busy_us > 0) && !dev->busy_pending) {
+                dev->busy_pending = 1;
+                dev->tf->atastat  = BUSY_STAT | (dev->tf->atastat & ERR_STAT);
+                timer_set_delay_u64(&dev->busy_timer,
+                                    (uint64_t) dev->busy_us * TIMER_USEC);
+                epat_log(dev->log, "drive busy %d us before completing\n",
+                         dev->busy_us);
+                break;
+            }
+            dev->busy_pending = 0;
             dev->tf->atastat = READY_STAT;
             if (sc->packet_status == PHASE_ERROR)
                 dev->tf->atastat |= ERR_STAT;
@@ -816,6 +857,9 @@ epat_init(UNUSED(const device_t *info))
     dev->status = EPAT_STAT_IDLE;
     dev->log    = log_open("EPAT");
     dev->port   = (uint8_t) device_get_config_int("port");
+    dev->busy_us = device_get_config_int("busy_ms") * 1000;
+
+    timer_add(&dev->busy_timer, epat_busy_done, dev, 0);
 
     /* The drive does not exist yet - see epat_attach_drive(). */
 
@@ -854,6 +898,30 @@ static const device_config_t epat_config[] = {
             { .description = "LPT3", .value = 2 },
             { .description = "LPT4", .value = 3 },
             { .description = ""                 }
+        },
+        .bios           = { { 0 } }
+    },
+    {
+        /*
+         * How long the drive holds BSY after a command. 0 is the original
+         * instant behaviour and is NOT faithful - the real LS-120 was measured
+         * still BSY after 0.5 s. Use a realistic value when testing a driver's
+         * timeouts, and 0 when testing its logic.
+         */
+        .name           = "busy_ms",
+        .description    = "Drive busy time after a command",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
+            { .description = "Instant (not faithful)", .value =    0 },
+            { .description = "50 ms",                  .value =   50 },
+            { .description = "250 ms",                 .value =  250 },
+            { .description = "750 ms (measured)",      .value =  750 },
+            { .description = "2 s",                    .value = 2000 },
+            { .description = ""                                      }
         },
         .bios           = { { 0 } }
     },
