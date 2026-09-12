@@ -444,8 +444,21 @@ epat_pio_request(epat_t *dev, const int out)
             dev->sd->command_stop(sc);
 
         sc->callback = 0.0;
-        if (sc->packet_status == PHASE_COMPLETE)
+        /*
+         * rdisk_phase_data_out() calls command_stop() itself and returns 1 on
+         * success, but its failure path returns 0 having left the phase at
+         * PHASE_ERROR. Firing the callback only for PHASE_COMPLETE therefore
+         * stranded every failed write: the data moved, the device never
+         * reported, DRQ stayed asserted and the driver polled status forever.
+         * Observed 2026-09-13 - a WRITE(10) to LBA 1 followed by 11,000+
+         * status reads of 48h (DRDY|DRQ) and no completion.
+         */
+        if ((sc->packet_status == PHASE_COMPLETE) ||
+            (sc->packet_status == PHASE_ERROR)) {
+            epat_log(dev->log, "data phase ended in %s\n",
+                     (sc->packet_status == PHASE_ERROR) ? "ERROR" : "COMPLETE");
             epat_atapi_callback(dev);
+        }
     } else {
         /* Short tail: tell the host how much is actually left. */
         if ((sc->packet_len - dev->tf->pos) < sc->max_transfer_len) {
