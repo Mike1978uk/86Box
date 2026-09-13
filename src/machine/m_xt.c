@@ -796,17 +796,18 @@ machine_ibmxt_inboard386_init(const machine_t *model)
        (non-ECP/EPP) parallel port - was present in this project's own local fork but never
        included in PR #7626 (this file wasn't fully ported - the function returned early). */
     lpt_t *lpt = device_add_inst(&lpt_port_device, 1);
-    lpt_port_setup(lpt, LPT1_ADDR);
-    lpt_port_irq(lpt, LPT1_IRQ);
     /*
-     * ...and it really is an ECP card, so model one. The comment above has
-     * said "ECP/EPP" since this was ported while the port stayed standard,
-     * which left an ECR-less LPT: a guest probing base+402h found nothing and
-     * silently fell back to nibble. The real machine's vendor LS-120 driver
-     * selects "ECP Read"/"ECP Write" on this exact port, so without this no
-     * ECP transport can be exercised here at all.
+     * ECP BEFORE setup, and the order matters: lpt_set_ecp() only sets a flag,
+     * while lpt_port_setup() is what claims base+400h - and it does so only
+     * when that flag is already set. Called the other way round the ECR window
+     * is never registered, the guest's ECR writes go to open bus, and a driver
+     * that selects ECP reads its data from nothing. Measured 2026-09-13: an
+     * ECP-pinned driver issued INQUIRY, saw ireason 2 and byte count 36, then
+     * received nothing and the drive never enumerated.
      */
     lpt_set_ecp(lpt, 1);
+    lpt_port_setup(lpt, LPT1_ADDR);
+    lpt_port_irq(lpt, LPT1_IRQ);
 
     return ret;
 }

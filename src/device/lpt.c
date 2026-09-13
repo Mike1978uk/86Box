@@ -683,6 +683,9 @@ lpt_write(const uint16_t port, const uint8_t val, void *priv)
             break;
 
         case 0x0402: case 0x0406:
+            /* DIAGNOSTIC 2026-09-13 - remove once ECP is proven. */
+            pclog("[ECPDIAG] ECR write %02X (mode %i), was %02X\n",
+                    val, (val >> 5) & 7, dev->ecr);
             if ((val & 0xc0) == 0x40) { /* FIFO modes */
                 if (((dev->ecr & 0x0c) != 0x08) && ((val & 0x0c) == 0x08)) { /* transition to dmaEn && !serviceIntr */
                     dev->dma_stat = 0x00;
@@ -895,6 +898,14 @@ lpt_read(const uint16_t port, void *priv)
                 default:
                     break;
                 case 3:
+                    /* DIAGNOSTIC 2026-09-13 - remove once ECP is proven. */
+                    pclog("[ECPDIAG] read fifo: ecr=%02X ctrl_raw=%02X dir=%i "
+                            "fifo_empty=%i dt=%i cb=%i\n",
+                            dev->ecr, lpt_get_ctrl_raw(dev),
+                            !!(lpt_get_ctrl_raw(dev) & 0x20),
+                            !!fifo_get_empty(dev->fifo),
+                            (dev->dt != NULL),
+                            ((dev->dt != NULL) && (dev->dt->ecp_read_data != NULL)));
                     if (lpt_get_ctrl_raw(dev) & 0x20) {
                         /*
                          * Real FIFO content first - that is the chardev
@@ -907,8 +918,10 @@ lpt_read(const uint16_t port, void *priv)
                             ret = lpt_read_fifo(dev);
                         else if ((dev->dt != NULL) &&
                                  (dev->dt->ecp_read_data != NULL) &&
-                                 (dev->dt->priv != NULL))
+                                 (dev->dt->priv != NULL)) {
                             ret = dev->dt->ecp_read_data(dev->dt->priv);
+                            pclog("[ECPDIAG] device supplied %02X\n", ret);
+                        }
                     }
                     break;
                 case 6:
