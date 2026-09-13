@@ -160,6 +160,10 @@ rdisk_max_medium_size(const rdisk_t *dev)
             return JAZ_1GB_SECTORS;
         case RDISK_TYPE_JAZ_2GB:
             return JAZ_2GB_SECTORS;
+        case RDISK_TYPE_SUPERDISK_120:
+            return SUPERDISK_SECTORS;
+        case RDISK_TYPE_SUPERDISK_240:
+            return SUPERDISK_240_SECTORS;
         default:
             return ZIP_250_SECTORS;
     }
@@ -177,6 +181,11 @@ rdisk_supports_medium_size(const rdisk_t *dev, const uint32_t sectors)
             return sectors == JAZ_1GB_SECTORS;
         case RDISK_TYPE_JAZ_2GB:
             return (sectors == JAZ_1GB_SECTORS) || (sectors == JAZ_2GB_SECTORS);
+        /* An LS-240 drive reads LS-120 media, so accept both there. */
+        case RDISK_TYPE_SUPERDISK_120:
+            return sectors == SUPERDISK_SECTORS;
+        case RDISK_TYPE_SUPERDISK_240:
+            return (sectors == SUPERDISK_SECTORS) || (sectors == SUPERDISK_240_SECTORS);
         default:
             return (sectors == ZIP_SECTORS) || (sectors == ZIP_250_SECTORS) ||
                    (sectors == JAZ_1GB_SECTORS) || (sectors == JAZ_2GB_SECTORS);

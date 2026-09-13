@@ -44,11 +44,9 @@ enum {
     RDISK_TYPE_ZIP_250,
     RDISK_TYPE_JAZ_1GB,
     RDISK_TYPE_JAZ_2GB,
-#if 0
     RDISK_TYPE_ZIP_750,
     RDISK_TYPE_SUPERDISK_120,
     RDISK_TYPE_SUPERDISK_240,
-#endif
 };
 
 typedef struct rdisk_type_t {
