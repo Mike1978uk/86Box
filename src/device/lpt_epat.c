@@ -946,6 +946,17 @@ epat_ecp_read_data(void *priv)
     return epat_data_read(dev);
 }
 
+static void
+epat_ecp_write_data(uint8_t val, void *priv)
+{
+    epat_t *dev = (epat_t *) priv;
+
+    /* The payload half of an ECP transfer - same sink the nibble block
+       write feeds, so the ATAPI layer sees one stream either way. */
+    if (dev->connected)
+        epat_data_write(dev, val);
+}
+
 static void *
 epat_init(UNUSED(const device_t *info))
 {
@@ -975,6 +986,7 @@ epat_init(UNUSED(const device_t *info))
      * guest driver that picks ECP can actually receive.
      */
     lpt_set_ecp_read_data(dev->lpt, epat_ecp_read_data);
+    lpt_set_ecp_write_data(dev->lpt, epat_ecp_write_data);
 
     return dev;
 }

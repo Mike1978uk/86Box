@@ -526,7 +526,17 @@ lpt_fifo_out_callback(void *priv)
 
                 /* We do not currently support sending commands. */
                 if (tag == 0x01) {
-                    if (dev->output_enabled && dev->dt && dev->dt->write_data && dev->dt->priv)
+                    /*
+                     * In an ECP FIFO mode a device that offers ecp_write_data
+                     * gets the byte there instead: its write_data() path is
+                     * framed for SPP block transfers and cannot recognise an
+                     * ECP payload byte arriving without that framing.
+                     */
+                    if (dev->output_enabled && dev->dt && dev->dt->priv &&
+                        dev->ecp && ((dev->ecr & 0xe0) != 0x00) &&
+                        dev->dt->ecp_write_data)
+                        dev->dt->ecp_write_data(val, dev->dt->priv);
+                    else if (dev->output_enabled && dev->dt && dev->dt->write_data && dev->dt->priv)
                         dev->dt->write_data(val, dev->dt->priv);
 
                     lpt_strobe(dev, 1);
@@ -1348,6 +1358,13 @@ lpt_set_ecp_read_data(lpt_t *dev, uint8_t (*ecp_read_data)(void *priv))
 {
     if ((dev != NULL) && (dev->dt != NULL))
         dev->dt->ecp_read_data = ecp_read_data;
+}
+
+void
+lpt_set_ecp_write_data(lpt_t *dev, void (*ecp_write_data)(uint8_t val, void *priv))
+{
+    if ((dev != NULL) && (dev->dt != NULL))
+        dev->dt->ecp_write_data = ecp_write_data;
 }
 
 void

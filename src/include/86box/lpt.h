@@ -32,6 +32,13 @@ typedef struct lpt_device_s {
      * supplies a byte on demand when the FIFO is empty.
      */
     uint8_t       (*ecp_read_data)(void *priv);
+    /*
+     * ECP forward transfer. The FIFO drain hands bytes to write_data(),
+     * but a device that frames SPP block writes separately cannot tell an
+     * ECP byte from a stray one there. A device that sets this receives
+     * ECP payload on its own path.
+     */
+    void          (*ecp_write_data)(uint8_t val, void *priv);
 
     void *        priv;
 } lpt_device_t;
@@ -169,6 +176,8 @@ extern void                lpt_devices_reset(void);
 
 extern void                lpt_set_ecp_read_data(lpt_t *dev,
                                                  uint8_t (*ecp_read_data)(void *priv));
+extern void                lpt_set_ecp_write_data(lpt_t *dev,
+                                                  void (*ecp_write_data)(uint8_t val, void *priv));
 extern void                lpt_set_next_inst(int ni);
 extern void                lpt_set_3bc_used(int is_3bc_used);
 
