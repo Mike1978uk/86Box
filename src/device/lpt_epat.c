@@ -181,6 +181,17 @@ typedef struct epat_s {
     pc_timer_t busy_timer;
     int        busy_us;
     int        busy_pending; /* the BSY window has been served for this command */
+    /*
+     * A real LS-120 is slow only on the FIRST media access after it has spun
+     * down, and answers in tens of milliseconds while still turning. Charging
+     * the spin-up to every command made this bed slower than the real machine
+     * and buried any transport difference under ~3,000 status polls per
+     * command - measured 2026-09-13, where SPP and ECP came out
+     * indistinguishable despite 132,176 bytes moving through the ECP FIFO.
+     * Model the spindle, not a constant.
+     */
+    uint64_t   last_media_ts;
+    int        spinning;
 } epat_t;
 
 #define EPAT_REG_TASKFILE 0x18 /* cont 0 */
@@ -210,6 +221,10 @@ typedef struct epat_s {
 #define EPAT_BLOCK_READ  1
 #define EPAT_BLOCK_WRITE 2
 #define ATA_CDB_LEN    12
+
+/* Two seconds idle is taken as spun down; a turning drive answers ~50x quicker. */
+#define EPAT_SPINDOWN_TSC  ((uint64_t) 2000000 * TIMER_USEC)
+#define EPAT_SPINNING_DIV  50
 
 #define ATA_ST_DRDY 0x40
 #define ATA_ST_DSC  0x10
@@ -397,12 +412,23 @@ epat_atapi_callback(epat_t *dev)
              */
             if ((dev->busy_us > 0) && !dev->busy_pending &&
                 epat_cdb_touches_media(sc->atapi_cdb[0])) {
-                dev->busy_pending = 1;
-                dev->tf->atastat  = BUSY_STAT | (dev->tf->atastat & ERR_STAT);
-                timer_set_delay_u64(&dev->busy_timer,
-                                    (uint64_t) dev->busy_us * TIMER_USEC);
-                epat_log(dev->log, "drive busy %d us before completing\n",
-                         dev->busy_us);
+                const uint64_t now  = tsc;
+                const uint64_t idle = (dev->last_media_ts == 0) ? ~0ULL
+                                                                : (now - dev->last_media_ts);
+                int            us;
+
+                if (!dev->spinning || (idle > EPAT_SPINDOWN_TSC)) {
+                    us            = dev->busy_us;           /* cold - full spin-up */
+                    dev->spinning = 1;
+                } else
+                    us = dev->busy_us / EPAT_SPINNING_DIV;  /* already turning */
+
+                dev->last_media_ts = now;
+                dev->busy_pending  = 1;
+                dev->tf->atastat   = BUSY_STAT | (dev->tf->atastat & ERR_STAT);
+                timer_set_delay_u64(&dev->busy_timer, (uint64_t) us * TIMER_USEC);
+                epat_log(dev->log, "drive busy %d us (%s)\n", us,
+                         (us == dev->busy_us) ? "spin-up" : "spinning");
                 break;
             }
             dev->busy_pending = 0;
