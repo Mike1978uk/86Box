@@ -902,6 +902,24 @@ epat_read_ctrl(void *priv)
     return dev->ctrl;
 }
 
+static uint8_t
+epat_ecp_read_data(void *priv)
+{
+    epat_t *dev = (epat_t *) priv;
+
+    /*
+     * ECP reverse transfer. Exactly the byte the nibble path would shift out
+     * as two halves through the status register - same source, so the ATAPI
+     * layer cannot tell the two transports apart, which is the point of
+     * having both. The host has already put the port in reverse ECP mode;
+     * the LPT layer only calls this when it has no FIFO content of its own.
+     */
+    if (!dev->connected)
+        return 0xFF;
+
+    return epat_data_read(dev);
+}
+
 static void *
 epat_init(UNUSED(const device_t *info))
 {
@@ -923,6 +941,14 @@ epat_init(UNUSED(const device_t *info))
                              epat_write_data, epat_write_ctrl, NULL,
                              epat_read_status, epat_read_ctrl,
                              NULL, NULL, dev);
+
+    /*
+     * The bridge sits behind an ECP-capable card on the real machine (the
+     * Intek21 TK9901 at 0x378/IRQ 7) and the vendor's DOS driver selects
+     * "ECP Read"/"ECP Write" there. Offer the reverse-transfer route so a
+     * guest driver that picks ECP can actually receive.
+     */
+    lpt_set_ecp_read_data(dev->lpt, epat_ecp_read_data);
 
     return dev;
 }

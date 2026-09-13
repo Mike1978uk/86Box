@@ -895,8 +895,21 @@ lpt_read(const uint16_t port, void *priv)
                 default:
                     break;
                 case 3:
-                    if (lpt_get_ctrl_raw(dev) & 0x20)
-                        ret = lpt_read_fifo(dev);
+                    if (lpt_get_ctrl_raw(dev) & 0x20) {
+                        /*
+                         * Real FIFO content first - that is the chardev
+                         * passthrough. An attached emulated device supplies a
+                         * byte on demand when the FIFO has none, which is the
+                         * only route it has: nothing fills the FIFO on its
+                         * behalf.
+                         */
+                        if (!fifo_get_empty(dev->fifo))
+                            ret = lpt_read_fifo(dev);
+                        else if ((dev->dt != NULL) &&
+                                 (dev->dt->ecp_read_data != NULL) &&
+                                 (dev->dt->priv != NULL))
+                            ret = dev->dt->ecp_read_data(dev->dt->priv);
+                    }
                     break;
                 case 6:
                     /* TFIFO */
@@ -1315,6 +1328,13 @@ lpt_init(const device_t *info)
         lpt1 = dev;
 
     return dev;
+}
+
+void
+lpt_set_ecp_read_data(lpt_t *dev, uint8_t (*ecp_read_data)(void *priv))
+{
+    if ((dev != NULL) && (dev->dt != NULL))
+        dev->dt->ecp_read_data = ecp_read_data;
 }
 
 void

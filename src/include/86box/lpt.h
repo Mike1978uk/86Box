@@ -25,6 +25,13 @@ typedef struct lpt_device_s {
     uint8_t       (*read_ctrl)(void *priv);
     void          (*epp_write_data)(uint8_t is_addr, uint8_t val, void *priv);
     void          (*epp_request_read)(uint8_t is_addr, void *priv);
+    /*
+     * ECP reverse transfer. The ECP FIFO is filled only by the chardev
+     * passthrough, so an emulated device had no way to supply bytes and an
+     * ECP read from one returned 0xFF forever. A device that sets this
+     * supplies a byte on demand when the FIFO is empty.
+     */
+    uint8_t       (*ecp_read_data)(void *priv);
 
     void *        priv;
 } lpt_device_t;
@@ -160,6 +167,8 @@ extern void *              lpt_attach_ex(int     port,
 extern void                lpt_devices_close(int soft);
 extern void                lpt_devices_reset(void);
 
+extern void                lpt_set_ecp_read_data(lpt_t *dev,
+                                                 uint8_t (*ecp_read_data)(void *priv));
 extern void                lpt_set_next_inst(int ni);
 extern void                lpt_set_3bc_used(int is_3bc_used);
 
