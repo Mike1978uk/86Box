@@ -798,6 +798,15 @@ machine_ibmxt_inboard386_init(const machine_t *model)
     lpt_t *lpt = device_add_inst(&lpt_port_device, 1);
     lpt_port_setup(lpt, LPT1_ADDR);
     lpt_port_irq(lpt, LPT1_IRQ);
+    /*
+     * ...and it really is an ECP card, so model one. The comment above has
+     * said "ECP/EPP" since this was ported while the port stayed standard,
+     * which left an ECR-less LPT: a guest probing base+402h found nothing and
+     * silently fell back to nibble. The real machine's vendor LS-120 driver
+     * selects "ECP Read"/"ECP Write" on this exact port, so without this no
+     * ECP transport can be exercised here at all.
+     */
+    lpt_set_ecp(lpt, 1);
 
     return ret;
 }
