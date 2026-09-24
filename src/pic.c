@@ -841,6 +841,10 @@ picint_common(uint16_t num, int level, int set, uint8_t *irq_state)
         }
     }
 
+    /* Without a slave, slot pin B4 - IRQ 9 on the AT connector - is IRQ 2. */
+    if (!pic.at && (num & (1 << 9)))
+        num = (num & ~(1 << 9)) | (1 << 2);
+
     uint16_t lines = level ? 0x0000 : num;
 
     if (!slaves)
