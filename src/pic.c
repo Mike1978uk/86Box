@@ -807,9 +807,20 @@ pic2_init(void)
     pic.slaves[2] = &pic2;
 }
 
+/* DIAGNOSTIC, not for upstream (#7): per-IRQ raise and deliver counts,
+   printed by the heartbeat in 386_dynarec.c. */
+uint32_t diag7_raised[16];
+uint32_t diag7_acked[8];
+
 void
 picint_common(uint16_t num, int level, int set, uint8_t *irq_state)
 {
+    if (set) {
+        for (int di = 0; di < 16; di++)
+            if (num & (1 << di))
+                diag7_raised[di]++;
+    }
+
     int     raise;
     int     max = 16;
     uint8_t b;
@@ -954,6 +965,8 @@ pic_irq_ack_read(pic_t *dev, int phase)
         if (phase == 0) {
             dev->interrupt |= 0x20; /* Freeze it so it still takes interrupts but they do not
                                        override the one currently being processed. */
+            if (dev == &pic)
+                diag7_acked[intr]++;
             pic_acknowledge(dev);
             if (slave)
                 dev->data_bus = pic_irq_ack_read(dev->slaves[intr], phase);

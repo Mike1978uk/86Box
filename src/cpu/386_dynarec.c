@@ -1277,6 +1277,25 @@ exec386(int32_t cycs)
               CS, cpu_state.pc, CPL, (int) (cr0 & 1), (cpu_state.eflags & VM_FLAG) ? 1 : 0,
               (cpu_state.flags & I_FLAG) ? 1 : 0, pic.imr, pic.isr, pic.irr,
               hbbytes, EAX, EBX, ECX, EDX, ESI, EDI, ESP);
+
+        extern uint32_t diag7_raised[16];
+        extern uint32_t diag7_acked[8];
+        pclog("  IRQS raised %u %u %u %u %u %u %u %u | acked %u %u %u %u %u %u %u %u\n",
+              diag7_raised[0], diag7_raised[1], diag7_raised[2], diag7_raised[3],
+              diag7_raised[4], diag7_raised[5], diag7_raised[6], diag7_raised[7],
+              diag7_acked[0], diag7_acked[1], diag7_acked[2], diag7_acked[3],
+              diag7_acked[4], diag7_acked[5], diag7_acked[6], diag7_acked[7]);
+
+        /* In V86 the return addresses on the stack name the caller. */
+        if (cpu_state.eflags & VM_FLAG) {
+            char stk[128];
+            int  stsav = cpu_state.abrt;
+            for (int i = 0; i < 12; i++)
+                sprintf(stk + i * 5, "%04X ", readmemwl(ss + ((ESP + i * 2) & 0xffff)));
+            cpu_state.abrt = stsav;
+            pclog("  V86 SS:SP=%04X:%04X DS=%04X ES=%04X | %s\n",
+                  cpu_state.seg_ss.seg, ESP & 0xffff, cpu_state.seg_ds.seg, cpu_state.seg_es.seg, stk);
+        }
     }
 
     while (cycles > 0) {
