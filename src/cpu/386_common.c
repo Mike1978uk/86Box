@@ -1655,6 +1655,13 @@ x86_int_sw(int num)
 {
     uint32_t addr;
 
+    /* DIAGNOSTIC, not for upstream (#7): INT 15h AH=86h and INT 13h calls. */
+    extern uint32_t diag7_int1586, diag7_int13;
+    if ((num == 0x15) && (AH == 0x86))
+        diag7_int1586++;
+    if (num == 0x13)
+        diag7_int13++;
+
     flags_rebuild();
     cycles -= timing_int;
 

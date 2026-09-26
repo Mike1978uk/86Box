@@ -1280,6 +1280,8 @@ exec386(int32_t cycs)
 
         extern uint32_t diag7_raised[16];
         extern uint32_t diag7_acked[8];
+        extern uint32_t diag7_int1586, diag7_int13;
+        pclog("  INT13 %u INT15/86 %u\n", diag7_int13, diag7_int1586);
         pclog("  IRQS raised %u %u %u %u %u %u %u %u | acked %u %u %u %u %u %u %u %u\n",
               diag7_raised[0], diag7_raised[1], diag7_raised[2], diag7_raised[3],
               diag7_raised[4], diag7_raised[5], diag7_raised[6], diag7_raised[7],

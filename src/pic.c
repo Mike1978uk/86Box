@@ -811,6 +811,8 @@ pic2_init(void)
    printed by the heartbeat in 386_dynarec.c. */
 uint32_t diag7_raised[16];
 uint32_t diag7_acked[8];
+uint32_t diag7_int1586;
+uint32_t diag7_int13;
 
 void
 picint_common(uint16_t num, int level, int set, uint8_t *irq_state)
