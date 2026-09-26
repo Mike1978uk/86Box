@@ -1253,6 +1253,32 @@ exec386(int32_t cycs)
 
     cycles += cycs;
 
+    /* DIAGNOSTIC, not for upstream (#7). Where the CPU is, sampled every 2000
+       timeslices: CS:EIP, 16 instruction bytes read through paging, and registers.
+       Opt-in: INBOARD_HEARTBEAT=1. abrt is saved and restored so a sample never
+       leaves a fault pending for the guest. */
+    static int      hb_on  = -1;
+    static uint32_t hb_ctr = 0;
+    if (hb_on < 0) {
+        const char *hb = getenv("INBOARD_HEARTBEAT");
+        hb_on = ((hb != NULL) && (hb[0] != '0'));
+    }
+    if (hb_on && (++hb_ctr >= 2000)) {
+        char     hbbytes[64];
+        uint32_t hblin = cs + cpu_state.pc;
+        int      hbsav = cpu_state.abrt;
+
+        hb_ctr = 0;
+        for (int i = 0; i < 16; i++)
+            sprintf(hbbytes + i * 3, "%02X ", readmembl(hblin + i));
+        cpu_state.abrt = hbsav;
+        pclog("HEARTBEAT [%04X:%08X] cpl=%i pm=%i v86=%i if=%i pic imr=%02X isr=%02X irr=%02X | %s| "
+              "eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X esp=%08X\n",
+              CS, cpu_state.pc, CPL, (int) (cr0 & 1), (cpu_state.eflags & VM_FLAG) ? 1 : 0,
+              (cpu_state.flags & I_FLAG) ? 1 : 0, pic.imr, pic.isr, pic.irr,
+              hbbytes, EAX, EBX, ECX, EDX, ESI, EDI, ESP);
+    }
+
     while (cycles > 0) {
         cycle_period = (timer_target - (uint64_t) tsc) + 1;
 

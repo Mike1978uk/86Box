@@ -4280,6 +4280,9 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             }
             dev->mode = IBM_MODE;
             dev->on = dev->accel.advfunc_cntl & 0x01;
+            /* DIAGNOSTIC, not for upstream (#7): who hands the screen to the 8514 side. */
+            pclog("DIAG7 [%04X:%08X] 4AE8 advfunc=%02X on=%d hdisp=%d vdisp=%d\n",
+                  CS, cpu_state.pc, dev->accel.advfunc_cntl, dev->on, dev->hdisp, dev->vdisp);
             dev->vendor_mode = 0;
             if (ATI_MACH32) {
                 if (mach->regs[0xb0] & 0x20) {
@@ -4770,6 +4773,9 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
             dev->mode = ATI_MODE;
             dev->on = mach->accel.clock_sel & 0x01;
+            /* DIAGNOSTIC, not for upstream (#7). */
+            pclog("DIAG7 [%04X:%08X] 4AEE clock_sel=%04X on=%d hdisp=%d vdisp=%d\n",
+                  CS, cpu_state.pc, mach->accel.clock_sel, dev->on, dev->hdisp, dev->vdisp);
             dev->vendor_mode = 1;
             if (ATI_MACH32) {
                 if (mach->regs[0xb0] & 0x20) {
