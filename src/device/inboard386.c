@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <86box/86box.h>
 #include "cpu.h"
 #include <86box/device.h>
@@ -772,6 +773,42 @@ inboard386_init(const device_t *info)
         uint8_t b                  = mem_readb_phys(0xf0000 + a);
         dev->bios_rom_snapshot[a]  = b;
         dev->bios_shadow_ram[a]    = b;
+    }
+
+    /* DIAGNOSTIC, not for upstream (#10): give the 1986 ROM one pre-1986 behaviour at a
+       time, so a working Win95 boot can be A/B'd against each difference the 5150 and
+       1982 XT ROMs have. INBOARD_OLDBIOS is a bitmask; each patch checks the bytes it
+       replaces and refuses if they are not the 09MAY86 ROM's. */
+    {
+        static const struct {
+            int         bit;
+            uint16_t    off;
+            uint8_t     len;
+            uint8_t     old[6];
+            uint8_t     new[6];
+            const char *what;
+        } p[] = {
+            { 1, 0xfffe, 1, { 0xfb }, { 0xff }, "model byte FF (5150)" },
+            { 2, 0x1c7e, 2, { 0x74, 0x2e }, { 0x90, 0x90 }, "INT 15h C0 unsupported" },
+            { 4, 0x1c9d, 2, { 0x74, 0x18 }, { 0x90, 0x90 }, "INT 15h 88 unsupported" },
+            { 8, 0xe996, 6, { 0x80, 0xfc, 0x0c, 0xf5, 0x72, 0x17 },
+                            { 0x80, 0xfc, 0x02, 0x72, 0x01, 0xcf }, "INT 1Ah AH>=2 iret, flags untouched" },
+            { 16, 0x0071, 1, { 0x19 }, { 0x06 }, "INT 13h diskette AH>5 bad command" },
+        };
+        const char *ob   = getenv("INBOARD_OLDBIOS");
+        int         mask = ob ? (int) strtol(ob, NULL, 0) : 0;
+
+        for (unsigned i = 0; i < sizeof(p) / sizeof(p[0]); i++) {
+            if (!(mask & p[i].bit))
+                continue;
+            if (memcmp(&dev->bios_rom_snapshot[p[i].off], p[i].old, p[i].len)) {
+                pclog("OLDBIOS: REFUSED %s - F000:%04X is not the 09MAY86 bytes\n", p[i].what, p[i].off);
+                continue;
+            }
+            memcpy(&dev->bios_rom_snapshot[p[i].off], p[i].new, p[i].len);
+            memcpy(&dev->bios_shadow_ram[p[i].off], p[i].new, p[i].len);
+            pclog("OLDBIOS: applied %s at F000:%04X\n", p[i].what, p[i].off);
+        }
     }
 
     /* "ROM BIOS shadow RAM failed" - SUPERSEDED (2026-07-26, later same day): the "ROM is
