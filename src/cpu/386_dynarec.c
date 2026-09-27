@@ -1390,8 +1390,7 @@ exec386(int32_t cycs)
                     extern uint32_t diag10_ppc;
                     static int      nrv = 0;
                     if (nrv++ < 40)
-                        pclog("DIAG10 RESETVEC F000:FFF0 reached from %04X:%08X (pm=%i)
-",
+                        pclog("DIAG10 RESETVEC F000:FFF0 reached from %04X:%08X (pm=%i)\n",
                               diag10_pcs, diag10_ppc, (int) (cr0 & 1));
                 }
             }
