@@ -671,6 +671,28 @@ static const device_config_t ibmxt_inboard386_config[] = {
                 .files         = { "roms/machines/ibmxt86/BIOS_5160_10JAN86_U18_62X0851_27256_F800.BIN",
                                    "roms/machines/ibmxt86/BIOS_5160_10JAN86_U19_62X0854_27256_F000.BIN", "" }
             },
+            /* DIAGNOSTIC, not for upstream (#10): the pre-1986 ROMs, so the 5150 and early
+               5160 can be tested with the Inboard. The 5150 entry also swaps in the 5150's
+               keyboard/PPI interface - see machine_ibmxt_inboard386_init(). */
+            {
+                .name          = "DIAG IBM 5160 BIOS 1501512 (11/08/82)",
+                .internal_name = "ibm5160_1501512_5000027",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 2,
+                .local         = 0,
+                .size          = 65536,
+                .files         = { "roms/machines/ibmxt/BIOS_5160_08NOV82_U18_1501512.BIN",
+                                   "roms/machines/ibmxt/BIOS_5160_08NOV82_U19_5000027.BIN", "" }
+            },
+            {
+                .name          = "DIAG IBM 5150 BIOS 1501476 (10/27/82)",
+                .internal_name = "ibm5150_1501476",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 1,
+                .size          = 8192,
+                .files         = { "roms/machines/ibmpc82/BIOS_5150_27OCT82_1501476_U33.BIN", "" }
+            },
             { .files_no = 0 }
         }
     },
@@ -751,6 +773,15 @@ machine_ibmxt_inboard386_init(const machine_t *model)
         offset = 0x6000;
     ret = bios_load_linear(fn, 0x000fe000, 65536, offset);
 
+    /* DIAGNOSTIC (#10): the 5150 ROM is a single 8 KB chip with no BASIC pairing here. */
+    const int is5150 = (strcmp(bios_sel, "ibm5150_1501476") == 0);
+    if (is5150) {
+        enable_basic = 0;
+        /* A real 5150 always has its Cassette BASIC ROMs; POST checksums them. */
+        if (ret)
+            (void) bios_load_aux_linear("roms/machines/ibmpc82/ibm-basic-1.10.rom", 0x000f6000, 32768, 0);
+    }
+
     if (enable_basic && ret) {
         if (local == 0) { // needed for stock roms
             fn = device_get_bios_file(model->device, bios_sel, 0);
@@ -783,7 +814,8 @@ machine_ibmxt_inboard386_init(const machine_t *model)
     if (bios_only || !ret)
         return ret;
 
-    device_add(&kbc_xt_device);
+    pclog("DIAG10: Inboard machine BIOS %s%s\n", bios_sel, is5150 ? " (5150 PPI)" : "");
+    device_add(is5150 ? &kbc_pc82_device : &kbc_xt_device);
 
     machine_xt_common_init(model, 0);
 
