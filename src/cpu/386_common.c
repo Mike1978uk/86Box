@@ -1662,6 +1662,11 @@ x86_int_sw(int num)
     if (num == 0x13)
         diag7_int13++;
 
+    /* DIAGNOSTIC, not for upstream (#10): every INT 10h-1Fh by AH. */
+    extern uint32_t diag10_sw[16][256];
+    if ((num >= 0x10) && (num <= 0x1f))
+        diag10_sw[num - 0x10][AH]++;
+
     flags_rebuild();
     cycles -= timing_int;
 

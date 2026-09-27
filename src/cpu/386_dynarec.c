@@ -1240,6 +1240,28 @@ inboard_post_fixups(void)
 
 }
 
+/* DIAGNOSTIC, not for upstream (#10): log each distinct code location that reads
+   the BIOS model byte, capped. Called from inboard386_bios_shadow_read(). */
+void
+diag10_model_caller(void)
+{
+    static uint32_t seen[32][2];
+    static int      nseen = 0;
+    uint32_t        cs_v  = CS;
+    uint32_t        pc_v  = cpu_state.pc;
+
+    for (int i = 0; i < nseen; i++)
+        if ((seen[i][0] == cs_v) && (seen[i][1] == pc_v))
+            return;
+    if (nseen >= 32)
+        return;
+    seen[nseen][0] = cs_v;
+    seen[nseen][1] = pc_v;
+    nseen++;
+    pclog("  MODELBYTE read by [%04X:%08X] pm=%i v86=%i cpl=%i\n", cs_v, pc_v,
+          (int) (cr0 & 1), (cpu_state.eflags & VM_FLAG) ? 1 : 0, CPL);
+}
+
 void
 exec386(int32_t cycs)
 {
@@ -1288,6 +1310,28 @@ exec386(int32_t cycs)
               diag7_acked[0], diag7_acked[1], diag7_acked[2], diag7_acked[3],
               diag7_acked[4], diag7_acked[5], diag7_acked[6], diag7_acked[7]);
 
+        /* DIAGNOSTIC (#10): the BIOS service tally, printed only when it changed. */
+        {
+            extern uint32_t diag10_sw[16][256], diag10_rom[16][256], diag10_model;
+            static uint32_t last_sum = 0;
+            uint32_t        sum      = diag10_model;
+            for (int v = 0; v < 16; v++)
+                for (int a = 0; a < 256; a++)
+                    sum += diag10_sw[v][a] * 3 + diag10_rom[v][a];
+            if (sum != last_sum) {
+                char line[2048];
+                int  n = 0;
+                last_sum = sum;
+                for (int v = 0; v < 16; v++)
+                    for (int a = 0; a < 256; a++)
+                        if ((diag10_sw[v][a] || diag10_rom[v][a]) && (n < 1990))
+                            n += sprintf(line + n, " %02X/%02X=%u:%u", 0x10 + v, a,
+                                         diag10_sw[v][a], diag10_rom[v][a]);
+                line[n] = 0;
+                pclog("  BIOSTALLY int/ah=sw:rom%s | model reads %u\n", line, diag10_model);
+            }
+        }
+
         /* In V86 the return addresses on the stack name the caller. */
         if (cpu_state.eflags & VM_FLAG) {
             char stk[128];
@@ -1316,6 +1360,28 @@ exec386(int32_t cycs)
             oldcpl = CPL;
             cpu_state.oldpc = cpu_state.pc;
             cpu_state.op32  = use32;
+
+            /* DIAGNOSTIC, not for upstream (#10): arrivals at the 1986 ROM's
+               own INT 10h-1Ah entry points, by AH, in real mode or V86. */
+            if ((CS == 0xf000) && (!(cr0 & 1) || (cpu_state.eflags & VM_FLAG))) {
+                extern uint32_t diag10_rom[16][256];
+                int             v = -1;
+                switch (cpu_state.pc) {
+                    case 0xf065: v = 0x0; break;
+                    case 0xf84d: v = 0x1; break;
+                    case 0xf841: v = 0x2; break;
+                    case 0xec59: v = 0x3; break;
+                    case 0xe739: v = 0x4; break;
+                    case 0xf859: v = 0x5; break;
+                    case 0xe82e: v = 0x6; break;
+                    case 0xefd2: v = 0x7; break;
+                    case 0xe6f2: v = 0x9; break;
+                    case 0xfe6e: v = 0xa; break;
+                    default: break;
+                }
+                if (v >= 0)
+                    diag10_rom[v][AH]++;
+            }
 
 #ifndef USE_NEW_DYNAREC
             x86_was_reset = 0;

@@ -814,6 +814,14 @@ uint32_t diag7_acked[8];
 uint32_t diag7_int1586;
 uint32_t diag7_int13;
 
+/* DIAGNOSTIC, not for upstream (#10). Which BIOS services Windows 95 asks the
+   1986 ROM for: diag10_sw counts INT n instructions by AH, diag10_rom counts
+   arrivals at the ROM's own entry points by AH, which also catches calls VMM
+   reflects into V86 without an INT instruction. Dumped by the heartbeat. */
+uint32_t diag10_sw[16][256];
+uint32_t diag10_rom[16][256];
+uint32_t diag10_model;
+
 void
 picint_common(uint16_t num, int level, int set, uint8_t *irq_state)
 {

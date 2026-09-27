@@ -562,6 +562,13 @@ inboard386_bios_shadow_read(uint32_t addr, void *priv)
        Splitting on the address leaves the low window byte-for-byte as it was. */
     if (addr >= 0x100000)
         return dev->bios_shadow_ram[addr & 0xffff];
+    /* DIAGNOSTIC, not for upstream (#10): who reads the model byte at F000:FFFE. */
+    if ((addr & 0xffff) == 0xfffe) {
+        extern uint32_t diag10_model;
+        extern void     diag10_model_caller(void);
+        diag10_model++;
+        diag10_model_caller();
+    }
     if (dev->rom_shadow_enabled)
         return dev->bios_shadow_ram[addr & 0xffff];
     return dev->bios_rom_snapshot[addr & 0xffff];
