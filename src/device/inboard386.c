@@ -805,9 +805,32 @@ inboard386_init(const device_t *info)
                 pclog("OLDBIOS: REFUSED %s - F000:%04X is not the 09MAY86 bytes\n", p[i].what, p[i].off);
                 continue;
             }
+            /* POST checksums the ROM and halts at F000:E0AB on a mismatch, so keep each
+               8 KB block's byte sum: add the patch's difference to an unused CC padding
+               byte in the same block (F000:1D57+ and F000:E2A3+ in the 09MAY86 ROM). */
+            uint16_t pad = ((p[i].off & 0xe000) == 0x0000) ? 0x1d60 : 0xe2a8;
+            uint8_t  delta = 0;
+            if (((p[i].off & 0xe000) != 0x0000) && ((p[i].off & 0xe000) != 0xe000)) {
+                pclog("OLDBIOS: REFUSED %s - no padding byte known for its block\n", p[i].what);
+                continue;
+            }
+            for (int k = 0; k < p[i].len; k++)
+                delta += (uint8_t) (p[i].old[k] - p[i].new[k]);
             memcpy(&dev->bios_rom_snapshot[p[i].off], p[i].new, p[i].len);
             memcpy(&dev->bios_shadow_ram[p[i].off], p[i].new, p[i].len);
-            pclog("OLDBIOS: applied %s at F000:%04X\n", p[i].what, p[i].off);
+            dev->bios_rom_snapshot[pad] += delta;
+            dev->bios_shadow_ram[pad] += delta;
+            pclog("OLDBIOS: applied %s at F000:%04X, checksum kept via F000:%04X\n",
+                  p[i].what, p[i].off, pad);
+        }
+        {
+            uint8_t s0 = 0, s7 = 0;
+            for (int a = 0x0000; a < 0x2000; a++)
+                s0 += dev->bios_rom_snapshot[a];
+            for (int a = 0xe000; a < 0x10000; a++)
+                s7 += dev->bios_rom_snapshot[a];
+            if (mask)
+                pclog("OLDBIOS: block sums F000:0000=%02X F000:E000=%02X (09MAY86: E7 19)\n", s0, s7);
         }
     }
 
