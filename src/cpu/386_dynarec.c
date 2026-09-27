@@ -1385,12 +1385,12 @@ exec386(int32_t cycs)
                 if (v >= 0)
                     diag10_rom[v][AH]++;
                 /* DIAGNOSTIC (#10): who arrives at the reset vector, and from where. */
-                if (cpu_state.pc == 0xfff0) {
+                if ((cpu_state.pc == 0xfff0) || (cpu_state.pc == 0xe05b)) {
                     extern uint16_t diag10_pcs;
                     extern uint32_t diag10_ppc;
                     static int      nrv = 0;
                     if (nrv++ < 40)
-                        pclog("DIAG10 RESETVEC F000:FFF0 reached from %04X:%08X (pm=%i)\n",
+                        pclog("DIAG10 RESETVEC F000:%04X reached from %04X:%08X (pm=%i)\n", cpu_state.pc,
                               diag10_pcs, diag10_ppc, (int) (cr0 & 1));
                 }
             }
