@@ -394,6 +394,8 @@ reset_common(int hard)
 void
 resetx86(void)
 {
+    pclog("DIAG10 RESET hard  at %04X:%08X
+", CS, cpu_state.pc); /* DIAGNOSTIC (#10) */
     reset_common(1);
 
     soft_reset_mask = 0;
@@ -406,6 +408,8 @@ softresetx86(void)
     if (soft_reset_mask)
         return;
 
+    pclog("DIAG10 RESET soft  at %04X:%08X
+", CS, cpu_state.pc); /* DIAGNOSTIC (#10) */
     reset_common(0);
 }
 

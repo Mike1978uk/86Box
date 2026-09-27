@@ -1240,6 +1240,9 @@ inboard_post_fixups(void)
 
 }
 
+uint16_t diag10_pcs; /* DIAGNOSTIC (#10): the previous instruction's CS:PC */
+uint32_t diag10_ppc;
+
 /* DIAGNOSTIC, not for upstream (#10): log each distinct code location that reads
    the BIOS model byte, capped. Called from inboard386_bios_shadow_read(). */
 void
@@ -1381,6 +1384,22 @@ exec386(int32_t cycs)
                 }
                 if (v >= 0)
                     diag10_rom[v][AH]++;
+                /* DIAGNOSTIC (#10): who arrives at the reset vector, and from where. */
+                if (cpu_state.pc == 0xfff0) {
+                    extern uint16_t diag10_pcs;
+                    extern uint32_t diag10_ppc;
+                    static int      nrv = 0;
+                    if (nrv++ < 40)
+                        pclog("DIAG10 RESETVEC F000:FFF0 reached from %04X:%08X (pm=%i)
+",
+                              diag10_pcs, diag10_ppc, (int) (cr0 & 1));
+                }
+            }
+            {
+                extern uint16_t diag10_pcs;
+                extern uint32_t diag10_ppc;
+                diag10_pcs = CS;
+                diag10_ppc = cpu_state.pc;
             }
 
 #ifndef USE_NEW_DYNAREC
