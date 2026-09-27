@@ -535,8 +535,14 @@ kbd_read(uint16_t port, void *priv)
                     ret = kbd->pd >> 4;
             } else if ((kbd->type == KBD_TYPE_PC81) || (kbd->type == KBD_TYPE_PC82) ||
                 (kbd->type == KBD_TYPE_PRAVETZ)) {
+                /* DIAGNOSTIC, not for upstream (#10): SW2 reports conventional memory only.
+                   On the Inboard machine mem_size includes the card's extended memory, and a
+                   5150 POST sized from that tests far past 640 KB. */
+                int sw2kb = mem_size + isa_mem_size;
+                if (sw2kb > 640)
+                    sw2kb = 640;
                 if (kbd->pb & 0x04) /* PB2 */
-                    switch (mem_size + isa_mem_size) {
+                    switch (sw2kb) {
                         case 64:
                         case 48:
                         case 32:
@@ -544,11 +550,11 @@ kbd_read(uint16_t port, void *priv)
                             ret = 0x00;
                             break;
                         default:
-                            ret = (((mem_size + isa_mem_size) - 64) / 32) & 0x0f;
+                            ret = ((sw2kb - 64) / 32) & 0x0f;
                             break;
                     }
                 else
-                    ret = (((mem_size + isa_mem_size) - 64) / 32) >> 4;
+                    ret = ((sw2kb - 64) / 32) >> 4;
             } else if ((kbd->type == KBD_TYPE_OLIVETTI) ||
                        (kbd->type == KBD_TYPE_ZENITH)) {
                 /* Olivetti M19 or Zenith Data Systems Z-151 */
