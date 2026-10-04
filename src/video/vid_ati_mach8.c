@@ -3981,6 +3981,30 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
     int mono_src;
     int ret = 0x00;
 
+    /* DIAGNOSTIC, not for upstream (#41): MACH8_COUNT=1 tallies accelerator writes, so
+       pixel-transfer bytes (E2E8) can be compared with on-card blit commands (9AE8). */
+    {
+        static int      cnt_on = -1;
+        static uint32_t cnt_port[0x10000];
+        static uint32_t cnt_cmd[8];
+        static uint32_t cnt_total;
+        if (cnt_on < 0)
+            cnt_on = getenv("MACH8_COUNT") != NULL;
+        if (cnt_on) {
+            cnt_port[port] += len;
+            if ((port == 0x9ae8) && (len == 2))
+                cnt_cmd[(val >> 13) & 7]++;
+            if (++cnt_total % 1000000 == 0) {
+                pclog("MACH8COUNT %u writes: cmd nop %u line %u rect %u rect2 %u line2 %u -- %u blit %u pat %u\n",
+                      cnt_total, cnt_cmd[0], cnt_cmd[1], cnt_cmd[2], cnt_cmd[3], cnt_cmd[4], cnt_cmd[5],
+                      cnt_cmd[6], cnt_cmd[7]);
+                for (int p = 0; p < 0x10000; p++)
+                    if (cnt_port[p] >= 20000)
+                        pclog("MACH8COUNT   port %04X bytes %u\n", p, cnt_port[p]);
+            }
+        }
+    }
+
     if (port & 0x8000) {
         if ((port & 0x06) != 0x06) {
             if ((port != 0xe2e8) && (port != 0xe2e9) && (port != 0xe6e8) && (port != 0xe6e9)) {

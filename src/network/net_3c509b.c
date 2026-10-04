@@ -1220,6 +1220,10 @@ el3_command(el3_t *dev, uint16_t val)
             break;
         case CMD_SET_RX_FILTER:
             dev->rx_filter = param & 0x0f;
+            /* DIAGNOSTIC, not for upstream (#41): which receive filter the guest driver sets. */
+            pclog("3C509B: rx filter %x (ind %d mc %d bc %d promisc %d)\n", dev->rx_filter,
+                  dev->rx_filter & 1, (dev->rx_filter >> 1) & 1, (dev->rx_filter >> 2) & 1,
+                  (dev->rx_filter >> 3) & 1);
             break;
         case CMD_SET_RX_EARLY_THRESH:
             dev->rx_early_thresh = param & THRESH_MASK;
