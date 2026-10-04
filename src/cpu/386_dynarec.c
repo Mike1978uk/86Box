@@ -1238,6 +1238,40 @@ inboard_post_fixups(void)
         }
     }
 
+    /* DIAGNOSTIC, not for upstream (#10): INBOARD_NMITEST=<n> raises one I/O channel check
+       NMI <n> instructions after the CPU first runs protected-mode code at CS 28h (the
+       Windows 95 VMM), as the Inboard's check is suspected of doing on a 5150. The NMI is
+       held pending while port A0h masks it, as the XT's mask gate would. */
+    {
+        extern int  diag_iochk;
+        static int  nmitest = -1;
+        static long nmitest_left;
+        if (nmitest < 0) {
+            const char *e = getenv("INBOARD_NMITEST");
+            nmitest       = e ? 1 : 0;
+            nmitest_left  = e ? strtol(e, NULL, 0) : 0;
+            if (nmitest)
+                pclog("NMITEST: enabled, delay %ld\n", nmitest_left);
+        }
+        if ((nmitest == 1) && (cr0 & 1) && !(cpu_state.eflags & VM_FLAG) && (CS == 0x28)) {
+            nmitest = 2;
+            pclog("NMITEST: armed at %04X:%08X\n", CS, cpu_state.pc);
+        }
+        if (nmitest == 2) {
+            if (nmitest_left > 0)
+                nmitest_left--;
+            else {
+                nmitest    = 3;
+                diag_iochk = 1;
+                nmi        = 1;
+                pclog("NMITEST: raised at %04X:%08X, nmi_mask %02X\n", CS, cpu_state.pc, nmi_mask);
+            }
+        } else if ((nmitest == 3) && !nmi) {
+            nmitest = 4;
+            pclog("NMITEST: delivered, now at %04X:%08X, pm %d, vm86 %d\n", CS, cpu_state.pc,
+                  (int) (cr0 & 1), (cpu_state.eflags & VM_FLAG) ? 1 : 0);
+        }
+    }
 }
 
 uint16_t diag10_pcs; /* DIAGNOSTIC (#10): the previous instruction's CS:PC */

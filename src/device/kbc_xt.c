@@ -99,6 +99,10 @@ static int     is_tandy = 0;
 static int     is_t1x00 = 0;
 static int     is_amstrad = 0;
 
+/* DIAGNOSTIC, not for upstream (#10): an injected I/O channel check, port 62h bit 6.
+   Set by inboard_post_fixups() under INBOARD_NMITEST; port 61h bit 5 clears it, as on an XT. */
+int diag_iochk = 0;
+
 #define kbd_adddata kbd_adddata_xt_common
 
 #ifdef ENABLE_KEYBOARD_XT_LOG
@@ -407,6 +411,10 @@ kbd_write(uint16_t port, uint8_t val, void *priv)
                 (kbd->type == KBD_TYPE_JUKOST))
                 kbd->clock = !!(kbd->pb & 0x40);
             ppi.pb = val;
+            if ((val & 0x20) && diag_iochk) {
+                diag_iochk = 0;
+                pclog("NMITEST: latch cleared by port 61h = %02X\n", val);
+            }
 
             timer_process();
 
@@ -569,6 +577,12 @@ kbd_read(uint16_t port, void *priv)
                     ret = (kbd->pd & 0x0d) | (hasfpu ? 0x02 : 0x00);
             }
             ret |= (ppispeakon ? 0x20 : 0);
+            if (diag_iochk) {
+                static int seen = 0;
+                ret |= 0x40;
+                if (seen++ < 4)
+                    pclog("NMITEST: port 62h read with the latch set (%02X)\n", ret);
+            }
 
             /* This is needed to avoid error 131 (cassette error).
                This is serial read: bit 5 = clock, bit 4 = data, cassette header is 256 x 0xff. */
