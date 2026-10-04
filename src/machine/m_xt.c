@@ -693,6 +693,17 @@ static const device_config_t ibmxt_inboard386_config[] = {
                 .size          = 8192,
                 .files         = { "roms/machines/ibmpc82/BIOS_5150_27OCT82_1501476_U33.BIN", "" }
             },
+            {
+                /* DIAGNOSTIC (#10): the Super PC BIOS v2.5 build from Cimon's 5150, dumped on
+                   his machine; the file is his and is kept outside the repository. */
+                .name          = "DIAG Super PC BIOS v2.5 (Cimon's 5150)",
+                .internal_name = "cimon5150_superpc25",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 1,
+                .size          = 8192,
+                .files         = { "roms/machines/ibmpc82/CIMON_SUPERPC25_FE000.BIN", "" }
+            },
             { .files_no = 0 }
         }
     },
@@ -774,7 +785,8 @@ machine_ibmxt_inboard386_init(const machine_t *model)
     ret = bios_load_linear(fn, 0x000fe000, 65536, offset);
 
     /* DIAGNOSTIC (#10): the 5150 ROM is a single 8 KB chip with no BASIC pairing here. */
-    const int is5150 = (strcmp(bios_sel, "ibm5150_1501476") == 0);
+    const int is5150 = (strcmp(bios_sel, "ibm5150_1501476") == 0) ||
+                       (strcmp(bios_sel, "cimon5150_superpc25") == 0);
     if (is5150) {
         enable_basic = 0;
         /* A real 5150 always has its Cassette BASIC ROMs; POST checksums them. */
