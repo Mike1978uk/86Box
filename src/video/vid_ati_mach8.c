@@ -5612,6 +5612,11 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                 temp = mach->accel.patt_data_idx | (mach->accel.patt_data_idx_reg & 0x20);
             break;
 
+        case 0xd6ee:
+            if (len == 2)
+                temp = mach->accel.patt_idx;
+            break;
+
         case 0x86ee:
         case 0x86ef:
             temp = 0x0000;
@@ -5671,14 +5676,15 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
             break;
 
         case 0xa2ee:
+            /*Only these bits read back on the Mach8: FFFF reads back as 06EE.*/
             if (len == 2)
-                temp = mach->accel.linedraw_opt;
+                temp = mach->accel.linedraw_opt & (ATI_MACH32 ? 0xffff : 0x06ee);
             else
-                temp = mach->accel.linedraw_opt & 0xff;
+                temp = mach->accel.linedraw_opt & (ATI_MACH32 ? 0xff : 0xee);
             break;
         case 0xa2ef:
             if (len == 1)
-                temp = mach->accel.linedraw_opt >> 8;
+                temp = (mach->accel.linedraw_opt >> 8) & (ATI_MACH32 ? 0xff : 0x06);
             break;
 
         case 0xb2ee:

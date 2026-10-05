@@ -471,10 +471,11 @@ svga_in(uint16_t addr, void *priv)
             ret = dev->dac_mask;
             break;
         case 0x2eb:
-            /* The 8514/Ultra's DAC (Bt478 type) has no state register: a read
-               of either address port returns the address register, which in
-               read mode runs one entry ahead. Its POST ROM checks this. */
-            if (ATI_8514A_ULTRA)
+            /* The DACs on ATI's 8514/Ultra (Bt478 type) and Graphics Ultra have
+               no state register: a read of either address port returns the
+               address register, which in read mode runs one entry ahead. Their
+               POST ROM and ATI's TEST.COM check this. */
+            if (ATI_8514A_ULTRA || ATI_GRAPHICS_ULTRA)
                 ret = dev->dac_addr;
             else
                 ret = dev->dac_status;
