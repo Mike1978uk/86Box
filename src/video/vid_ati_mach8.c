@@ -6377,7 +6377,7 @@ mach_accel_outw(uint16_t port, uint16_t val, void *priv)
     if (port == 0xf6ee)
         port = 0x82e8;
 
-    if ((port == 0xbae8) && (val == 0x6b) && (m8t_left < 0))
+    if ((port == 0xbae8) && (val == 0x6b) && (m8t_left <= 0) && dev->on)
         m8t_left = 3000;
     m8t("OUT", port, val, 2);
     if ((m8t_left > 0) && (port == 0xbee8) && ((val >> 12) >= 1) && ((val >> 12) <= 4))
