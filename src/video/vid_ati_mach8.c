@@ -6312,7 +6312,7 @@ m8t(const char *dir, uint16_t port, uint16_t val, int len)
 {
     switch (port & ~1) {
         case 0x9ae8: case 0x42e8: case 0xe2e8: case 0xa6e8: case 0xbae8:
-        case 0x9aee: case 0x82e8: case 0x86e8: case 0x96e8: case 0xbee8:
+        case 0x9aee:
             if (m8t_left > 0) {
                 pclog("[M8T] %s%d %04x=%04x\n", dir, len, port, val);
                 m8t_left--;
@@ -6356,7 +6356,7 @@ mach_accel_outw(uint16_t port, uint16_t val, void *priv)
         port = 0x82e8;
 
     if ((port == 0xbae8) && (val == 0x6b) && (m8t_left < 0))
-        m8t_left = 400;
+        m8t_left = 3000;
     m8t("OUT", port, val, 2);
 
     if (port & 0x8000) { /*Command FIFO*/
