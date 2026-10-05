@@ -4728,13 +4728,17 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             else {
                 WRITE8(port, mach->local_cntl, val);
             }
+            if (old_local_cntl != mach->local_cntl)
+                pclog("[M8F] [%04X:%04X] 32EE %04x -> %04x queued=%d\n", CS, cpu_state.pc, old_local_cntl, mach->local_cntl, mach->fifo_test_idx);
             if ((old_local_cntl & 0x10) && !(mach->local_cntl & 0x10)) {
                 int queued = mach->fifo_test_idx;
 
                 mach->fifo_test_idx = 0;
                 dev->fifo_idx       = 0;
-                for (int i = 0; i < queued; i++)
+                for (int i = 0; i < queued; i++) {
+                    pclog("[M8F] replay %04x=%04x\n", mach->fifo_test_port[i], mach->fifo_test_data[i]);
                     dev->accel_out_fifo(mach, mach->fifo_test_port[i], mach->fifo_test_data[i], 2);
+                }
             }
             if (ATI_GRAPHICS_ULTRA || ATI_MACH32)
                 mach32_updatemapping(mach, svga);
