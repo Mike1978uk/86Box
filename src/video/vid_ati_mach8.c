@@ -6312,7 +6312,7 @@ m8t(const char *dir, uint16_t port, uint16_t val, int len)
 {
     switch (port & ~1) {
         case 0x9ae8: case 0x42e8: case 0xe2e8: case 0xa6e8: case 0xbae8:
-        case 0x9aee:
+        case 0x9aee: case 0xdaee: case 0xdeee: case 0xe2ee: case 0xe6ee:
             if (m8t_left > 0) {
                 pclog("[M8T] %s%d %04x=%04x\n", dir, len, port, val);
                 m8t_left--;
