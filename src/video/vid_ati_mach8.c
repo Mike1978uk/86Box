@@ -5577,6 +5577,12 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                             ibm8514_accel_out_pixtrans(svga, port, (temp >> 8) & 0xff, len);
                         } else
                             ibm8514_accel_out_pixtrans(svga, port, temp, len);
+
+                        /*Once the last word has been taken, DATARDY and BUSY drop (8514/A GP_STAT).*/
+                        if (dev->accel.sy < 0) {
+                            dev->force_busy     = 0;
+                            dev->data_available = 0;
+                        }
                     }
                 }
             }
