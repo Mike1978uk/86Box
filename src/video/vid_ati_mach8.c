@@ -4720,15 +4720,26 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             break;
 
         case 0x32ee:
-        case 0x32ef:
+        case 0x32ef: {
+            uint16_t old_local_cntl = mach->local_cntl;
+
             if (len == 2)
                 mach->local_cntl = val;
             else {
                 WRITE8(port, mach->local_cntl, val);
             }
+            if ((old_local_cntl & 0x10) && !(mach->local_cntl & 0x10)) {
+                int queued = mach->fifo_test_idx;
+
+                mach->fifo_test_idx = 0;
+                dev->fifo_idx       = 0;
+                for (int i = 0; i < queued; i++)
+                    dev->accel_out_fifo(mach, mach->fifo_test_port[i], mach->fifo_test_data[i], 2);
+            }
             if (ATI_GRAPHICS_ULTRA || ATI_MACH32)
                 mach32_updatemapping(mach, svga);
             break;
+        }
 
         case 0x36ee:
         case 0x36ef:
@@ -6330,6 +6341,17 @@ mach_accel_outb(uint16_t port, uint8_t val, void *priv)
     svga_t *svga = &mach->svga;
     ibm8514_t *dev = (ibm8514_t *) svga->dev8514;
 
+    if ((port & 0x8000) && (mach->local_cntl & 0x10)) {
+        /*FIFO test mode: a write is only queued, for FIFO_TEST_DATA to read back.
+          Whatever is still queued runs when the mode is switched off.*/
+        if (dev->fifo_idx < 16) {
+            mach->fifo_test_data[dev->fifo_idx] = val;
+            mach->fifo_test_port[dev->fifo_idx] = port;
+            dev->fifo_idx++;
+        }
+        mach->fifo_test_idx = dev->fifo_idx;
+        return;
+    }
     if (port & 0x8000) { /*Command FIFO*/
         if (dev->accel.cmd_back) {
             mach->fifo_test_data[dev->fifo_idx] = val;
@@ -6366,6 +6388,17 @@ mach_accel_outw(uint16_t port, uint16_t val, void *priv)
               dev->accel.clip_left, dev->accel.clip_top, dev->accel.clip_right, dev->accel.clip_bottom,
               dev->vram[0], dev->vram[1], dev->vram[2], dev->vram[3]);
 
+    if ((port & 0x8000) && (mach->local_cntl & 0x10)) {
+        /*FIFO test mode: a write is only queued, for FIFO_TEST_DATA to read back.
+          Whatever is still queued runs when the mode is switched off.*/
+        if (dev->fifo_idx < 16) {
+            mach->fifo_test_data[dev->fifo_idx] = val;
+            mach->fifo_test_port[dev->fifo_idx] = port;
+            dev->fifo_idx++;
+        }
+        mach->fifo_test_idx = dev->fifo_idx;
+        return;
+    }
     if (port & 0x8000) { /*Command FIFO*/
         if (dev->accel.cmd_back) {
             mach->fifo_test_data[dev->fifo_idx] = val;
