@@ -6005,19 +6005,18 @@ mach_accel_in_call(uint16_t port, mach_t *mach, svga_t *svga, ibm8514_t *dev, in
             break;
 
         case 0x1aee:
-            if (dev->fifo_idx > 0)
-                dev->fifo_idx--;
-            if (mach->fifo_test_idx > 0)
-                mach->fifo_test_idx--;
-            fallthrough;
-        case 0x1aef:
-            mach_log(mach->log,"FIFO Test IDX=%d, Data=%04x.\n", mach->fifo_test_idx, mach->fifo_test_data[mach->fifo_test_idx]);
+        case 0x1aef: {
+            /*Reading the data does not take the entry off the FIFO; FIFO_TEST_TAG does.*/
+            int idx = (mach->fifo_test_idx > 0) ? (mach->fifo_test_idx - 1) : 0;
+
+            mach_log(mach->log,"FIFO Test IDX=%d, Data=%04x.\n", idx, mach->fifo_test_data[idx]);
             if (len == 2)
-                temp = mach->fifo_test_data[mach->fifo_test_idx];
+                temp = mach->fifo_test_data[idx];
             else {
-                READ8(port, mach->fifo_test_data[mach->fifo_test_idx]);
+                READ8(port, mach->fifo_test_data[idx]);
             }
             break;
+        }
 
         case 0x22ee:
             if (mach->pci_bus)
@@ -6069,9 +6068,13 @@ mach_accel_in_call(uint16_t port, mach_t *mach, svga_t *svga, ibm8514_t *dev, in
             temp = 0;
             if (len == 2) {
                 temp = 0x01;
-                if (mach->fifo_test_idx > 0)
+                if (mach->fifo_test_idx > 0) {
                     temp |= (fifo_test_tag[mach->fifo_test_idx - 1] << 8);
-                else
+                    /*Reading the tag takes the entry off the FIFO; it is never carried out.*/
+                    mach->fifo_test_idx--;
+                    if (dev->fifo_idx > 0)
+                        dev->fifo_idx--;
+                } else
                     temp |= (0xff << 8);
             } else {
                 if (port & 1) {
