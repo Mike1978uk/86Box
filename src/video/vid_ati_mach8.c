@@ -6358,6 +6358,8 @@ mach_accel_outw(uint16_t port, uint16_t val, void *priv)
     if ((port == 0xbae8) && (val == 0x6b) && (m8t_left < 0))
         m8t_left = 3000;
     m8t("OUT", port, val, 2);
+    if ((m8t_left > 0) && (port == 0xbee8) && ((val >> 12) >= 1) && ((val >> 12) <= 4))
+        pclog("[M8C] scissor %04x\n", val);
     if ((m8t_left > 0) && (port == 0x9ae8) && ((val == 0x43f0) || (val == 0x40f3)))
         pclog("[M8S] cmd=%04x on=%d pitch=%d mask=%08x bpp=%d abpp=%d clip l=%d t=%d r=%d b=%d vram0=%02x %02x %02x %02x\n",
               val, dev->on, dev->pitch, dev->vram_mask, dev->bpp, dev->accel_bpp,
