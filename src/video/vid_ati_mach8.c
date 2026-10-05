@@ -6304,6 +6304,25 @@ ati8514_accel_outl(uint16_t port, uint32_t val, void *priv)
     mach_log(mach->log,"OUTL port=%04x, val=%08x, fifo idx=%d.\n", port, val, dev->fifo_idx);
 }
 
+/*DIAGNOSTIC, not for upstream: trace TEST.COM's Video RAM stage, armed by its 006B mix write.*/
+static int m8t_left = -1;
+
+static void
+m8t(const char *dir, uint16_t port, uint16_t val, int len)
+{
+    switch (port & ~1) {
+        case 0x9ae8: case 0x42e8: case 0xe2e8: case 0xa6e8: case 0xbae8:
+        case 0x9aee: case 0x82e8: case 0x86e8: case 0x96e8: case 0xbee8:
+            if (m8t_left > 0) {
+                pclog("[M8T] %s%d %04x=%04x\n", dir, len, port, val);
+                m8t_left--;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
 static void
 mach_accel_outb(uint16_t port, uint8_t val, void *priv)
 {
@@ -6321,6 +6340,7 @@ mach_accel_outb(uint16_t port, uint8_t val, void *priv)
             mach->fifo_test_idx = dev->fifo_idx;
         }
     }
+    m8t("OUT", port, val, 1);
     dev->accel_out_fifo(mach, port, val, 1);
     mach_log(mach->log, "%04X:%08X: OUTB port=%04x, val=%02x, fifo idx=%d.\n", CS, cpu_state.pc, port, val, dev->fifo_idx);
 }
@@ -6334,6 +6354,10 @@ mach_accel_outw(uint16_t port, uint16_t val, void *priv)
 
     if (port == 0xf6ee)
         port = 0x82e8;
+
+    if ((port == 0xbae8) && (val == 0x6b) && (m8t_left < 0))
+        m8t_left = 400;
+    m8t("OUT", port, val, 2);
 
     if (port & 0x8000) { /*Command FIFO*/
         if (dev->accel.cmd_back) {
@@ -6445,6 +6469,7 @@ mach_accel_inb(uint16_t port, void *priv)
     else
         temp = mach_accel_in(port, mach, 1);
 
+    m8t("IN", port, temp, 1);
     mach_log(mach->log,"%04X:%08X: INB port=%04x, temp=%02x.\n", CS, cpu_state.pc, port, temp);
     return temp;
 }
@@ -6461,6 +6486,7 @@ mach_accel_inw(uint16_t port, void *priv)
     else
         temp = mach_accel_in(port, mach, 2);
 
+    m8t("IN", port, temp, 2);
     mach_log(mach->log,"%04X:%08X: INW port=%04x, temp=%04x.\n", CS, cpu_state.pc, port, temp);
     return temp;
 }
