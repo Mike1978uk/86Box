@@ -1966,7 +1966,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                0x78AE starts with CEEE), which has DRAW clear and would suppress
                every pixel. Take the data path, the pitch and the offset from the
                8514/A side whenever the extended one has no draw enabled. */
-            compat_scan = mach->accel.dp_compat && !(mach->accel.dp_config & 0x10);
+            compat_scan = mach->accel.dp_compat;
             if (compat_scan) {
                 frgd_sel    = dev->accel.frgd_sel;
                 bkgd_sel    = dev->accel.bkgd_sel;
@@ -5344,7 +5344,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                        FIFO test pattern (0x5555/0xaaaa). Do not let a stale DP_CONFIG
                        turn the draw into a pixel-transfer read. See case 5 of
                        mach_accel_start(). */
-                    if (mach->accel.dp_compat && !(mach->accel.dp_config & 0x10))
+                    if (mach->accel.dp_compat)
                         dev->accel.cmd_back = 1;
 
 
