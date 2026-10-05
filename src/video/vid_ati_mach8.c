@@ -5010,12 +5010,14 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             break;
 
         case 0x82ee:
-            mach->accel.patt_data_idx_reg = val & 0x1f;
-            mach->accel.patt_data_idx = mach->accel.patt_data_idx_reg;
+            /*The Mach8 keeps six bits here and reads them back; the pattern
+              registers are reached through the low five.*/
+            mach->accel.patt_data_idx_reg = val & 0x3f;
+            mach->accel.patt_data_idx = mach->accel.patt_data_idx_reg & 0x1f;
 
             mach_log(mach->log,"Write Port 82ee: Pattern Data Index=%d, idx for color=%d.\n", val & 0x1f, mach->accel.color_pattern_idx);
 
-            if (mach->accel.patt_data_idx_reg < 0x10)
+            if ((mach->accel.patt_data_idx_reg & 0x1f) < 0x10)
                 mach->accel.color_pattern_idx = mach->accel.patt_idx;
             else
                 mach->accel.color_pattern_idx = 0;
@@ -5023,7 +5025,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
         case 0x8eee:
             if (len == 2) {
-                if (mach->accel.patt_data_idx_reg < 0x10) {
+                if ((mach->accel.patt_data_idx_reg & 0x1f) < 0x10) {
                     if (dev->bpp) {
                         mach->accel.color_pattern_hicol[mach->accel.patt_data_idx] = val;
                         mach_log(mach->log,"Write Port 8eee: Color Pattern Word Data[%d]=%04x.\n", mach->accel.patt_data_idx, val);
@@ -5607,7 +5609,7 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
 
         case 0x82ee:
             if (len == 2)
-                temp = mach->accel.patt_data_idx;
+                temp = mach->accel.patt_data_idx | (mach->accel.patt_data_idx_reg & 0x20);
             break;
 
         case 0x86ee:
