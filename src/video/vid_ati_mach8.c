@@ -5302,9 +5302,10 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 mach->accel.cy_end_line                      = mach->accel.line_array[3];
                 if (mach->accel.line_idx == 5) {
                     /*Index 5 sets the current Y and returns to index 4: a move, not a draw.*/
-                    dev->accel.cur_x        = mach->accel.line_array[4];
-                    mach->accel.cx_end_line = mach->accel.line_array[4];
-                    mach->accel.cy_end_line = mach->accel.line_array[5];
+                    dev->accel.cur_x        = mach->accel.line_array[4] & 0x7ff;
+                    dev->accel.cur_y        = mach->accel.line_array[5] & 0x7ff;
+                    mach->accel.cx_end_line = dev->accel.cur_x;
+                    mach->accel.cy_end_line = dev->accel.cur_y;
                     mach->accel.line_idx    = 4;
                     break;
                 }
