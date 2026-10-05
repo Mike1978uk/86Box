@@ -5961,7 +5961,9 @@ mach_accel_in_call(uint16_t port, mach_t *mach, svga_t *svga, ibm8514_t *dev, in
                     }
                 }
 
-                if (!dev->fifo_idx && !dev->on) {
+                /*The Graphics Ultra reports an idle engine whether or not the 8514 display is on;
+                  TEST.COM checks it straight after a read with the display running.*/
+                if (!dev->fifo_idx && (!dev->on || ATI_GRAPHICS_ULTRA)) {
                     dev->force_busy = 0;
                     dev->force_busy2 = 0;
                     mach->force_busy = 0;
