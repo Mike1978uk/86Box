@@ -6386,6 +6386,8 @@ mach_accel_outw(uint16_t port, uint16_t val, void *priv)
     if (port == 0xf6ee)
         port = 0x82e8;
 
+    if (mach->local_cntl & 0x10)
+        pclog("[M8W] [%04X:%04X] OUTW %04x=%04x fifo=%d test=%d\n", CS, cpu_state.pc, port, val, dev->fifo_idx, mach->fifo_test_idx);
     if ((port == 0xbae8) && (val == 0x6b) && (m8t_left <= 0) && dev->on)
         m8t_left = 3000;
     m8t("OUT", port, val, 2);
@@ -6518,6 +6520,8 @@ mach_accel_inb(uint16_t port, void *priv)
     else
         temp = mach_accel_in(port, mach, 1);
 
+    if (mach->local_cntl & 0x10)
+        pclog("[M8W] [%04X:%04X] INB  %04x=%02x fifo=%d test=%d\n", CS, cpu_state.pc, port, temp, dev->fifo_idx, mach->fifo_test_idx);
     m8t("IN", port, temp, 1);
     mach_log(mach->log,"%04X:%08X: INB port=%04x, temp=%02x.\n", CS, cpu_state.pc, port, temp);
     return temp;
@@ -6535,6 +6539,8 @@ mach_accel_inw(uint16_t port, void *priv)
     else
         temp = mach_accel_in(port, mach, 2);
 
+    if (mach->local_cntl & 0x10)
+        pclog("[M8W] [%04X:%04X] INW  %04x=%04x fifo=%d test=%d\n", CS, cpu_state.pc, port, temp, dev->fifo_idx, mach->fifo_test_idx);
     m8t("IN", port, temp, 2);
     mach_log(mach->log,"%04X:%08X: INW port=%04x, temp=%04x.\n", CS, cpu_state.pc, port, temp);
     return temp;
