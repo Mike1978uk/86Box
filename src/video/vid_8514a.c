@@ -2224,7 +2224,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
             ibm8514_log(dev->log,"Rectangle %d: flags=%04x, odd=%d, c(%d,%d), frgdmix=%d, bkgdmix=%d, xcount=%d, and3=%d, len(%d,%d), CURX=%d, Width=%d, pixcntl=%d, mix_dat=%08x, count=%d, cpu_data=%08x, cpu_input=%d.\n", cmd, dev->accel.cmd, dev->accel.input, dev->accel.cx, dev->accel.cy, frgd_mix, bkgd_mix, dev->accel.x_count, and3, dev->accel.sx, dev->accel.sy, dev->accel.cur_x, dev->accel.maj_axis_pcnt, pixcntl, mix_dat, count, cpu_dat, cpu_input);
 
-            if (dev->accel.cmd & 0x08) { /*Vectored Rectangle*/
+            if ((dev->accel.cmd & 0x08) && !(ATI_GRAPHICS_ULTRA && ((dev->accel.multifunc[0x0a] & 0x06) == 0x04))) { /*Vectored Rectangle*/
                 if (cpu_input) {
                     while (count-- && (dev->accel.sy >= 0)) {
                         if ((dev->accel.cx >= clip_l) &&
@@ -2692,38 +2692,57 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         break;
                                 }
 
-                                READ(dev->accel.dest + dev->accel.cx, poly_src);
-                                if ((poly_src & rd_mask_polygon) == rd_mask_polygon)
-                                    dev->accel.fill_state ^= 1;
-
-                                READ(dev->accel.dest + dev->accel.cx, dest_dat);
-
-                                old_dest_dat = dest_dat;
-                                if (dev->accel.fill_state) {
-                                    if (rd_mask_polygon & 0x01) {
-                                        if (wrt_mask & 0x01) {
-                                            dest_dat &= ~(rd_mask_polygon & wrt_mask); /*Fill State On, Write Mask 1, Read Mask 1.*/
-                                            dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                        }
-                                    } else {
-                                        if (wrt_mask & 0x01) {
-                                            MIX(mix_dat & mix_mask, dest_dat, src_dat);
-                                            dest_dat &= ~rd_mask_polygon; /*Fill State On, Write Mask 1, Read Mask 0.*/
-                                            dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                        }
-                                    }
+                                if (ATI_GRAPHICS_ULTRA) {
+                                    /* Graphics Ultra (M8ROW3 on the real card): a pixel with every RD_MASK bit set is a
+                                       boundary; it flips inside/outside and is always filled. Other pixels are filled
+                                       while inside. Every pixel then loses its RD_MASK planes. */
+                                    int boundary;
+                                    int filled;
+                                    READ(dev->accel.dest + dev->accel.cx, dest_dat);
+                                    old_dest_dat = dest_dat;
+                                    boundary = ((dest_dat & rd_mask_polygon) == rd_mask_polygon);
+                                    filled   = boundary || dev->accel.fill_state;
+                                    if (boundary)
+                                        dev->accel.fill_state ^= 1;
+                                    if (filled)
+                                        MIX(mix_dat & mix_mask, dest_dat, src_dat);
+                                    dest_dat &= ~rd_mask_polygon;
+                                    dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                                 } else {
-                                    if (rd_mask_polygon & 0x01) {
-                                        if (wrt_mask & 0x01) {
-                                            dest_dat &= ~(rd_mask_polygon & wrt_mask); /*Fill State Off, Write Mask 1, Read Mask 1.*/
-                                            dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
+                                    READ(dev->accel.dest + dev->accel.cx, poly_src);
+                                    if ((poly_src & rd_mask_polygon) == rd_mask_polygon)
+                                        dev->accel.fill_state ^= 1;
+
+                                    READ(dev->accel.dest + dev->accel.cx, dest_dat);
+
+                                    old_dest_dat = dest_dat;
+                                    if (dev->accel.fill_state) {
+                                        if (rd_mask_polygon & 0x01) {
+                                            if (wrt_mask & 0x01) {
+                                                dest_dat &= ~(rd_mask_polygon & wrt_mask); /*Fill State On, Write Mask 1, Read Mask 1.*/
+                                                dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
+                                            }
+                                        } else {
+                                            if (wrt_mask & 0x01) {
+                                                MIX(mix_dat & mix_mask, dest_dat, src_dat);
+                                                dest_dat &= ~rd_mask_polygon; /*Fill State On, Write Mask 1, Read Mask 0.*/
+                                                dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
+                                            }
                                         }
                                     } else {
-                                        if (wrt_mask & 0x01) {
-                                            dest_dat &= ~rd_mask_polygon; /*Fill State Off, Write Mask 1, Read Mask 0.*/
-                                            dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
+                                        if (rd_mask_polygon & 0x01) {
+                                            if (wrt_mask & 0x01) {
+                                                dest_dat &= ~(rd_mask_polygon & wrt_mask); /*Fill State Off, Write Mask 1, Read Mask 1.*/
+                                                dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
+                                            }
+                                        } else {
+                                            if (wrt_mask & 0x01) {
+                                                dest_dat &= ~rd_mask_polygon; /*Fill State Off, Write Mask 1, Read Mask 0.*/
+                                                dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
+                                            }
                                         }
                                     }
+
                                 }
 
                                 if ((compare_mode == 0) ||
