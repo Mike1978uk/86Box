@@ -2401,7 +2401,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
             ibm8514_log(dev->log,"Rectangle %d: flags=%04x, odd=%d, c(%d,%d), frgdmix=%d, bkgdmix=%d, xcount=%d, and3=%d, len(%d,%d), CURX=%d, Width=%d, pixcntl=%d, mix_dat=%08x, count=%d, cpu_data=%08x, cpu_input=%d.\n", cmd, dev->accel.cmd, dev->accel.input, dev->accel.cx, dev->accel.cy, frgd_mix, bkgd_mix, dev->accel.x_count, and3, dev->accel.sx, dev->accel.sy, dev->accel.cur_x, dev->accel.maj_axis_pcnt, pixcntl, mix_dat, count, cpu_dat, cpu_input);
 
-            if ((dev->accel.cmd & 0x08) && !(ATI_GRAPHICS_ULTRA && ((dev->accel.multifunc[0x0a] & 0x06) == 0x04))) { /*Vectored Rectangle*/
+            if ((dev->accel.cmd & 0x08) && !(ATI_GRAPHICS_ULTRA && (dev->accel.multifunc[0x0a] & 0x04))) { /*Vectored Rectangle*/
                 if (cpu_input) {
                     while (count-- && (dev->accel.sy >= 0)) {
                         if ((dev->accel.cx >= clip_l) &&
@@ -2844,7 +2844,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 }
                             }
                         }
-                    } else if ((dev->accel.multifunc[0x0a] & 0x06) == 0x04) { /*Polygon Draw Type A*/
+                    } else if (((dev->accel.multifunc[0x0a] & 0x06) == 0x04) || (ATI_GRAPHICS_ULTRA && ((dev->accel.multifunc[0x0a] & 0x06) == 0x06))) { /*Polygon Draw Type A, or B on the Graphics Ultra*/
                         ibm8514_log(dev->log,"Polygon Draw Type A: Clipping: L=%d, R=%d, T=%d, B=%d, C(%d,%d), sx=%d, sy=%d.\n", clip_l, clip_r, clip_t, clip_b, dev->accel.cx, dev->accel.cy, dev->accel.sx, dev->accel.sy);
                         if (dev->on) pclog("[M8P] polyA cmd=%04x cur=%d,%d sx=%d sy=%d rdm=%02x wm=%02x cpu=%d\n", dev->accel.cmd, dev->accel.cx, dev->accel.cy, dev->accel.sx, dev->accel.sy, rd_mask_polygon, wrt_mask, cpu_input); /*DIAGNOSTIC*/
                         while (count-- && (dev->accel.sy >= 0)) {
@@ -2870,20 +2870,24 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 }
 
                                 if (ATI_GRAPHICS_ULTRA) {
-                                    /* Graphics Ultra (M8ROW3 on the real card): a pixel with every RD_MASK bit set is a
+                                    /* Graphics Ultra (M8ROW3 on the real card): a pixel with every outline-mask bit set is a
                                        boundary; it flips inside/outside and is always filled. Other pixels are filled
-                                       while inside. Every pixel then loses its RD_MASK planes. */
+                                       while inside. Type A outlines on RD_MASK and every pixel then loses its RD_MASK
+                                       planes; type B (PIX_CNTL bit 1) outlines on WRT_MASK and clears nothing. */
+                                    int type_b  = dev->accel.multifunc[0x0a] & 0x02;
+                                    int outline = type_b ? (wrt_mask & 0xff) : rd_mask_polygon;
                                     int boundary;
                                     int filled;
                                     READ(dev->accel.dest + dev->accel.cx, dest_dat);
                                     old_dest_dat = dest_dat;
-                                    boundary = ((dest_dat & rd_mask_polygon) == rd_mask_polygon);
+                                    boundary = ((dest_dat & outline) == outline);
                                     filled   = boundary || dev->accel.fill_state;
                                     if (boundary)
                                         dev->accel.fill_state ^= 1;
                                     if (filled)
                                         MIX(mix_dat & mix_mask, dest_dat, src_dat);
-                                    dest_dat &= ~rd_mask_polygon;
+                                    if (!type_b)
+                                        dest_dat &= ~rd_mask_polygon;
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                                 } else {
                                     READ(dev->accel.dest + dev->accel.cx, poly_src);
