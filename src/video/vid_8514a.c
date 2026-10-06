@@ -36,6 +36,11 @@
 #include <86box/plat.h>
 #include <86box/video.h>
 #include <86box/vid_8514a.h>
+
+/* DIAGNOSTIC, not for upstream: the per-operation probe traces are silenced while
+   MACH8_COUNT tallies a whole Windows session. */
+static int m8_quiet = -1;
+#define M8TRACE ((m8_quiet < 0) ? (m8_quiet = (getenv("MACH8_COUNT") != NULL)) : m8_quiet) ? (void) 0 : pclog
 #include <86box/vid_8514a_device.h>
 #include <86box/vid_xga.h>
 #include <86box/vid_svga.h>
@@ -1575,7 +1580,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
         /* On the Graphics Ultra a Bresenham line steps diagonally while the error term is not
            negative (M8SEQ); the comparison with MAJ_AXIS_PCNT is kept for the other chips. */
         case 1: /*Draw line*/
-            if (dev->on && !cpu_input) pclog("[M8L] start cmd=%04x cur=%d,%d maj=%d\n", dev->accel.cmd, dev->accel.cur_x, dev->accel.cur_y, dev->accel.maj_axis_pcnt); /*DIAGNOSTIC*/
+            if (dev->on && !cpu_input) M8TRACE("[M8L] start cmd=%04x cur=%d,%d maj=%d\n", dev->accel.cmd, dev->accel.cur_x, dev->accel.cur_y, dev->accel.maj_axis_pcnt); /*DIAGNOSTIC*/
             if (!cpu_input) {
                 dev->accel.x_count = 0;
 
@@ -1661,7 +1666,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->force_busy2 = 0;
                                 dev->fifo_idx = 0;
                                 dev->accel.cmd_back = 1;
-                                if (dev->on) pclog("[M8L] exit 0 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
+                                if (dev->on) M8TRACE("[M8L] exit 0 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
                                 break;
                             }
 
@@ -1715,7 +1720,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->force_busy2 = 0;
                                 dev->fifo_idx = 0;
                                 dev->accel.cmd_back = 1;
-                                if (dev->on) pclog("[M8L] exit 1 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
+                                if (dev->on) M8TRACE("[M8L] exit 1 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
                                 break;
                             }
 
@@ -1834,7 +1839,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->fifo_idx = 0;
                             }
                             dev->accel.cmd_back = 1;
-                            if (dev->on) pclog("[M8L] exit 2 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
+                            if (dev->on) M8TRACE("[M8L] exit 2 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
                             if (!cpu_input || ATI_GRAPHICS_ULTRA) {
                                 dev->accel.cur_x = dev->accel.cx;
                                 dev->accel.cur_y = dev->accel.cy;
@@ -1972,7 +1977,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->fifo_idx = 0;
                             }
                             dev->accel.cmd_back = 1;
-                            if (dev->on) pclog("[M8L] exit 3 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
+                            if (dev->on) M8TRACE("[M8L] exit 3 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
                             break;
                         }
 
@@ -2065,7 +2070,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->fifo_idx = 0;
                             }
                             dev->accel.cmd_back = 1;
-                            if (dev->on) pclog("[M8L] exit 4 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
+                            if (dev->on) M8TRACE("[M8L] exit 4 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
                             if (!cpu_input) {
                                 dev->accel.cur_x = dev->accel.cx;
                                 dev->accel.cur_y = dev->accel.cy;
@@ -2275,7 +2280,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                 }
                 break;
             }
-            if (dev->on && !cpu_input) pclog("[M8P] rect cmd=%04x pixcntl=%03x cur=%d,%d\n", dev->accel.cmd, dev->accel.multifunc[0x0a], dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
+            if (dev->on && !cpu_input) M8TRACE("[M8P] rect cmd=%04x pixcntl=%03x cur=%d,%d\n", dev->accel.cmd, dev->accel.multifunc[0x0a], dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
             if (!cpu_input) {
                 dev->accel.x_count = 0;
                 dev->accel.output = 0;
@@ -2846,7 +2851,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                         }
                     } else if (((dev->accel.multifunc[0x0a] & 0x06) == 0x04) || (ATI_GRAPHICS_ULTRA && ((dev->accel.multifunc[0x0a] & 0x06) == 0x06))) { /*Polygon Draw Type A, or B on the Graphics Ultra*/
                         ibm8514_log(dev->log,"Polygon Draw Type A: Clipping: L=%d, R=%d, T=%d, B=%d, C(%d,%d), sx=%d, sy=%d.\n", clip_l, clip_r, clip_t, clip_b, dev->accel.cx, dev->accel.cy, dev->accel.sx, dev->accel.sy);
-                        if (dev->on) pclog("[M8P] polyA cmd=%04x cur=%d,%d sx=%d sy=%d rdm=%02x wm=%02x cpu=%d\n", dev->accel.cmd, dev->accel.cx, dev->accel.cy, dev->accel.sx, dev->accel.sy, rd_mask_polygon, wrt_mask, cpu_input); /*DIAGNOSTIC*/
+                        if (dev->on) M8TRACE("[M8P] polyA cmd=%04x cur=%d,%d sx=%d sy=%d rdm=%02x wm=%02x cpu=%d\n", dev->accel.cmd, dev->accel.cx, dev->accel.cy, dev->accel.sx, dev->accel.sy, rd_mask_polygon, wrt_mask, cpu_input); /*DIAGNOSTIC*/
                         while (count-- && (dev->accel.sy >= 0)) {
                             if ((dev->accel.cx >= clip_l) &&
                                 (dev->accel.cx <= clip_r) &&
