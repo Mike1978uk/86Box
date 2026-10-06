@@ -2117,8 +2117,9 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                columns. With CPU data each word carries two pixels in this mode. */
             /* Graphics Ultra, command 4 (M8NIB on the real card): the rectangle (MIN+1 wide, MAJ+1 tall,
                LAST_PIXEL ignored) is cut into 4-pixel columns aligned to X mod 4. Each data byte fills one
-               row of one column; the first column runs one way in Y, the next the other way. BYTE_SEQ set:
-               two bytes per word, high first; clear: one byte per word, the low one. */
+               row of one column; the first column runs one way in Y, the next the other way. CMD bit 9
+               (16-bit data) set: two bytes per word, MSB first unless bit 12 (LSB first) is set;
+               clear: the low byte only. */
             if (ATI_GRAPHICS_ULTRA && (cmd == 4)) {
                 int xstep = (dev->accel.cmd & 0x20) ? 1 : -1;
                 int nbytes;
@@ -2156,18 +2157,16 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                     int xhi  = (xstep > 0) ? dev->accel.cx : dev->accel.dx;
                     int k    = 0;
                     while (nbytes--) {
-                        int down = (dev->accel.cmd & 0x80) ? !(dev->accel.x_count & 1) : (dev->accel.x_count & 1);
-                        int y    = down ? (dev->accel.dy + dev->accel.sy) : (dev->accel.dy + rows - 1 - dev->accel.sy);
+                        int ydir = (dev->accel.cmd & 0x80) ? 1 : -1; /*the first column runs this way from CUR_Y*/
+                        int y    = (dev->accel.x_count & 1) ? (dev->accel.dy + ydir * (rows - 1 - dev->accel.sy)) : (dev->accel.dy + ydir * dev->accel.sy);
                         int nx0  = dev->accel.sx & ~3;
                         uint16_t byte;
                         if (!cpu_input)
                             byte = frgd_color;
                         else if (dev->accel.cmd & 0x200)
-                            byte = (k++ ? cpu_dat : (cpu_dat >> 8)) & 0xff;
+                            byte = ((dev->accel.cmd & 0x1000) ? (k++ ? (cpu_dat >> 8) : cpu_dat) : (k++ ? cpu_dat : (cpu_dat >> 8))) & 0xff;
                         else
                             byte = cpu_dat & 0xff;
-                        if (!(dev->accel.cmd & 0x80))
-                            y = down ? (dev->accel.dy - dev->accel.sy) : (dev->accel.dy - rows + 1 + dev->accel.sy);
                         for (int x = nx0; x < nx0 + 4; x++) {
                             if ((x < xlo) || (x > xhi))
                                 continue;
