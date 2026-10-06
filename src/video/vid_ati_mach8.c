@@ -2077,6 +2077,15 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 } else {
                     mach->accel.stepx = 1;
                     mach->accel.width = 0;
+                    /* Graphics Ultra (TEST.COM TS1 on the real card): a SCAN_TO_X to the
+                       current X draws nothing and leaves CUR_X where it is. */
+                    if (ATI_GRAPHICS_ULTRA) {
+                        dev->force_busy  = 0;
+                        dev->force_busy2 = 0;
+                        mach->force_busy = 0;
+                        dev->accel.cmd_back = 1;
+                        return;
+                    }
                 }
 
                 dev->accel.sx = 0;
