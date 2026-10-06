@@ -1184,7 +1184,17 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
             uint16_t dst_row_width = mach->accel.width + (dst_wrap_row ? 1 : 0);
             uint16_t src_row_width = mach->accel.src_width + (src_wrap_row ? 1 : 0);
 
-            if (dst_wrap_row && (dev->accel.sy == 0)) {
+            /* Graphics Ultra (M8ROW3 on the real card, TS1 op 115): DEST_X_END and SRC_X_END are not
+               drawn or read even when the blit wraps; the first row runs from CUR_X (SRC_X) to the
+               end, every later row from DEST_X_START (SRC_X_START). */
+            if (ATI_GRAPHICS_ULTRA) {
+                dst_row_width = mach->accel.width;
+                src_row_width = mach->accel.src_width;
+                if (dst_wrap_row && (dev->accel.sy == 0))
+                    dst_row_width = ABS(mach->accel.dx_end - mach->accel.dx_first_row_start);
+                if (src_wrap_row && (dev->accel.sy == 0))
+                    src_row_width = ABS(mach->accel.sx_end - mach->accel.sx_first_row_start);
+            } else if (dst_wrap_row && (dev->accel.sy == 0)) {
                 if (mach->accel.dx_end > mach->accel.dx_first_row_start)
                     dst_row_width = (mach->accel.dx_end - mach->accel.dx_first_row_start) + 1;
                 else if (mach->accel.dx_end < mach->accel.dx_first_row_start)
@@ -1192,7 +1202,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 else
                     dst_row_width = 1;
             }
-            if (src_wrap_row && (dev->accel.sy == 0)) {
+            if (!ATI_GRAPHICS_ULTRA && src_wrap_row && (dev->accel.sy == 0)) {
                 if (mach->accel.sx_end > mach->accel.sx_first_row_start)
                     src_row_width = (mach->accel.sx_end - mach->accel.sx_first_row_start) + (mach->accel.src_width & 1);
                 else if (mach->accel.sx_end < mach->accel.sx_first_row_start)
@@ -1373,7 +1383,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         }
 
                         mach_log(mach->log, "SRC RowWidth=%d end of blit, original width=%d.\n", src_row_width, mach->accel.src_width);
-                        src_row_width = mach->accel.src_width + ((((mach->accel.src_width & 1)) && src_wrap_row) ? 1 : 0);
+                        src_row_width = ATI_GRAPHICS_ULTRA ? mach->accel.src_width : (mach->accel.src_width + ((((mach->accel.src_width & 1)) && src_wrap_row) ? 1 : 0));
 
                         dev->accel.cy += (mach->accel.src_y_dir ? 1 : -1);
                         dev->accel.src = mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch);
@@ -1407,7 +1417,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             dev->accel.dx--;
                     }
 
-                    dst_row_width = mach->accel.width + (dst_wrap_row ? 1 : 0);
+                    dst_row_width = ATI_GRAPHICS_ULTRA ? mach->accel.width : (mach->accel.width + (dst_wrap_row ? 1 : 0));
 
                     dev->accel.dy += mach->accel.stepy;
                     dev->accel.dest = mach->accel.dst_ge_offset + (dev->accel.dy * mach->accel.dst_pitch);
