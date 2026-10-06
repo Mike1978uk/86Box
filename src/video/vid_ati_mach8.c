@@ -4514,6 +4514,13 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
                             mach_log(mach->log,"IBM transfer.\n");
 
+                            /* Graphics Ultra (M8ROW3 on the real card): a rectangle fed from the CPU
+                               with the 16-bit bit clear and BYTE_SEQ set takes the first pixel from
+                               the high byte, as reads do. Lines with the same bits already match. */
+                            if (ATI_GRAPHICS_ULTRA && ((dev->accel.cmd >> 13) == 2) &&
+                                !(dev->accel.cmd & 0x1000) && (dev->accel.cmd & 0x200))
+                                val = ((val >> 8) | (val << 8)) & 0xffff;
+
                             if (dev->accel.output3) {
                                 ibm8514_accel_out_pixtrans(svga, port, val & 0xff, len);
                                 ibm8514_accel_out_pixtrans(svga, port, (val >> 8) & 0xff, len);
@@ -4559,6 +4566,13 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                                 break;
 
                             mach_log(mach->log,"IBM transfer.\n");
+
+                            /* Graphics Ultra (M8ROW3 on the real card): a rectangle fed from the CPU
+                               with the 16-bit bit clear and BYTE_SEQ set takes the first pixel from
+                               the high byte, as reads do. Lines with the same bits already match. */
+                            if (ATI_GRAPHICS_ULTRA && ((dev->accel.cmd >> 13) == 2) &&
+                                !(dev->accel.cmd & 0x1000) && (dev->accel.cmd & 0x200))
+                                val = ((val >> 8) | (val << 8)) & 0xffff;
 
                             if (dev->accel.output3) {
                                 ibm8514_accel_out_pixtrans(svga, port, val & 0xff, len);
