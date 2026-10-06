@@ -5054,6 +5054,12 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 WRITE8(port, mach->accel.ge_pitch, val);
             }
             dev->ext_pitch = ((mach->accel.ge_pitch & 0xff) << 3);
+            /* Graphics Ultra (M8EXP on the real card): GE_PITCH applies to the extended drawing
+               path at once, without a mode set. */
+            if (ATI_GRAPHICS_ULTRA) {
+                mach->accel.src_pitch = dev->ext_pitch;
+                mach->accel.dst_pitch = dev->ext_pitch;
+            }
 
             mach_log(mach->log,"ATI 8514/A: (0x%04x) GE Pitch val=0x%02x.\n", port, val);
             if (ATI_MACH32) {
