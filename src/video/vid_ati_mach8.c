@@ -2074,7 +2074,13 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                       mach->accel.dp_config, dev->accel.dx & 1, dev->accel.dy & 1, mach->accel.width & 1, dev->accel.dx, dev->accel.dy, dev->accel.cx, dev->accel.cy, mach->accel.width, mach->accel.src_width, dev->accel.sy, dev->accel.frgd_mix & 0x1f, mach->accel.color_pattern_idx, mach->accel.src_pitch, mach->accel.dst_pitch, mach->accel.scan_to_x);
 
                 if (!dev->accel.cmd_back) {
-                    if (mach_pixel_write(mach)) {
+                    /* On the 8514/A-compatible path DP_CONFIG is not in use, so its
+                       read/write bit says nothing: the draw takes CPU data only when
+                       an 8514/A source selects it, and never reads. */
+                    int scan_write = compat_scan ? ((frgd_sel == 2) || (bkgd_sel == 2) || (mono_src == 2)) : mach_pixel_write(mach);
+                    int scan_read  = compat_scan ? 0 : mach_pixel_read(mach);
+
+                    if (scan_write) {
                         mach_log(mach->log,"Scan To X Write pixtrans.\n");
                         dev->force_busy = 1;
                         dev->force_busy2 = 1;
@@ -2082,7 +2088,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         dev->data_available  = 0;
                         dev->data_available2 = 0;
                         return;
-                    } else if (mach_pixel_read(mach)) {
+                    } else if (scan_read) {
                         mach_log(mach->log,"Scan To X Read pixtrans.\n");
                         dev->force_busy = 1;
                         dev->force_busy2 = 1;
