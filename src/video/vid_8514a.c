@@ -2708,6 +2708,8 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat &= ~rd_mask_polygon;
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
+                                    if ((dev->accel.cmd & 0x04) && !dev->accel.sx)
+                                        dest_dat = old_dest_dat; /*LAST_PIXEL off: the last column is not drawn.*/
                                 } else {
                                     READ(dev->accel.dest + dev->accel.cx, poly_src);
                                     if ((poly_src & rd_mask_polygon) == rd_mask_polygon)
