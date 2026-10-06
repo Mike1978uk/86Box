@@ -5598,6 +5598,12 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                             ibm8514_accel_out_pixtrans(svga, port, (temp >> 8) & 0xff, len);
                         } else
                             ibm8514_accel_out_pixtrans(svga, port, temp, len);
+
+                        /* With the 16-bit transfer bit clear and BYTE_SEQ set, the Graphics
+                           Ultra hands a word read back with the first pixel in the high byte;
+                           with the 16-bit bit set it is in the low byte. */
+                        if (!(dev->accel.cmd & 0x1000) && (dev->accel.cmd & 0x200))
+                            temp = ((temp >> 8) | (temp << 8)) & 0xffff;
                     }
                 }
             }
