@@ -2203,6 +2203,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 dev->accel.temp_cnt = 8;
             }
 
+            /*DIAGNOSTIC, not for upstream*/
+            if (dev->on && !cpu_input)
+                pclog("[M8Y] count=%d width=%d dx=%d dy=%d dest=%06x clip l=%d t=%d r=%d b=%d cmp=%d fc=%08x wm=%08x\n",
+                      count, mach->accel.width, dev->accel.dx, dev->accel.dy, dev->accel.dest, clip_l, clip_t, clip_r, clip_b,
+                      compare_mode, frgd_color, wrt_mask);
+
             while (count--) {
                 switch (mono_src) {
                     case 0:
