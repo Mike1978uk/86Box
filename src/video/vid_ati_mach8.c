@@ -851,6 +851,8 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
 
         case 2: /*Non-conforming BitBLT from dest_y_end register (0xaeee)*/
             if (!cpu_input) {
+                if (dev->on) /*DIAGNOSTIC, not for upstream*/
+                    pclog("[M8B] start cur=%d,%d dyend=%d dpc=%04x\n", dev->accel.cur_x, dev->accel.cur_y, mach->accel.dest_y_end, mach->accel.dp_config);
                 mach->accel.stepx = 0;
                 mach->accel.stepy = 0;
 
@@ -1365,6 +1367,8 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             return;
                         dev->accel.cur_x = dev->accel.dx;
                         dev->accel.cur_y = dev->accel.dy;
+                        if (dev->on) /*DIAGNOSTIC*/
+                            pclog("[M8B] end cur=%d,%d\n", dev->accel.cur_x, dev->accel.cur_y);
                         return;
                     }
                 }
