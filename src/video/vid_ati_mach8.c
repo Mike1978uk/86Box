@@ -2535,6 +2535,10 @@ mach_accel_out_pixtrans(svga_t *svga, mach_t *mach, ibm8514_t *dev, uint16_t val
                 } else
                     mach_accel_start(mach->accel.cmd_type, 1, 2, -1, val | (val << 16), svga, mach, dev);
             } else {
+                /* Graphics Ultra (TS1 op 112 on the real card; Mach32 guide, DP_CONFIG bit 12): 16-bit
+                   colour data with LSB_FIRST clear gives its high byte first. */
+                if (ATI_GRAPHICS_ULTRA && !(mach->accel.dp_config & 0x1000))
+                    val = ((val >> 8) | (val << 8)) & 0xffff;
                 if (dev->accel.input)
                     mach_accel_start(mach->accel.cmd_type, 1, 1, -1, val, svga, mach, dev);
                 else
