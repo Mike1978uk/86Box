@@ -337,9 +337,23 @@ mach_pixel_read(mach_t *mach)
     return 1;
 }
 
-/* Graphics Ultra (TS1 op 112 on the real card): DP_CONFIG foreground source 6, which the Mach32
-   guide does not list, takes host data like source 2; each host byte then picks the colour pattern
-   byte at (byte >> 2). Everything that waits for host data treats it as source 2. */
+/* Graphics Ultra (M8FG6-9 and TS1 ops 112-113 on the real card): DP_CONFIG foreground source 6,
+   which the Mach32 guide does not list, waits for host data like source 2, so everything that
+   waits for host data treats it as source 2. Each host byte then picks a colour pattern byte; see
+   mach_src6_byte(). */
+/* The pattern byte a source 6 pixel takes. DP_CONFIG bit 11 clear: ((byte & 7) << 2) | (x & 1),
+   whatever PATT_INDEX and PATT_LENGTH say (M8FG6-9). Bit 11 set: (byte >> 2) reproduces TEST.COM
+   op 112 but NOT M8FG6-9, where the data starts a few pixels late and a word is skipped - an
+   open question (docs/ati_test_com_notes.md). */
+static uint8_t
+mach_src6_byte(mach_t *mach, uint8_t byte, int x)
+{
+    if (mach->accel.dp_config & 0x0800)
+        return mach->accel.color_pattern[(byte >> 2) & 0x1f];
+
+    return mach->accel.color_pattern[((byte & 7) << 2) | (x & 1)];
+}
+
 static int
 mach_frgd_sel(mach_t *mach, ibm8514_t *dev)
 {
@@ -2383,7 +2397,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 break;
                             case 2:
                                 if (ATI_GRAPHICS_ULTRA && (((mach->accel.dp_config >> 13) & 7) == 6))
-                                    src_dat = mach->accel.color_pattern[((cpu_dat & 0xff) >> 2) & 0x1f];
+                                    src_dat = mach_src6_byte(mach, cpu_dat & 0xff, dev->accel.dx);
                                 else
                                     src_dat = cpu_dat;
                                 break;
