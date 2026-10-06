@@ -1821,7 +1821,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             }
                             dev->accel.cmd_back = 1;
                             if (dev->on) pclog("[M8L] exit 2 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
-                            if (!cpu_input) {
+                            if (!cpu_input || ATI_GRAPHICS_ULTRA) {
                                 dev->accel.cur_x = dev->accel.cx;
                                 dev->accel.cur_y = dev->accel.cy;
                             }
@@ -1876,6 +1876,18 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                         }
                         dev->accel.sy--;
                         dev->accel.x_count++;
+
+                        /* Graphics Ultra: with LAST_PIXEL off the final point is not drawn, so a
+                           CPU-fed line ends once the last drawn pixel is done, without data for it. */
+                        if (ATI_GRAPHICS_ULTRA && cpu_input && !dev->accel.sy && (dev->accel.cmd & 0x04)) {
+                            dev->force_busy = 0;
+                            dev->force_busy2 = 0;
+                            dev->fifo_idx = 0;
+                            dev->accel.cmd_back = 1;
+                            dev->accel.cur_x = dev->accel.cx;
+                            dev->accel.cur_y = dev->accel.cy;
+                            break;
+                        }
                     }
                 }
             } else { /*Bresenham Line*/
