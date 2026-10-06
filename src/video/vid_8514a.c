@@ -1175,6 +1175,15 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
     }
 
     if (pixcntl == 1) {
+        /* Graphics Ultra (M8ROW3 on the real card) and Richter and Smith: PATTERN_L
+           (index 8) holds the LEFT four pixels of the eight, bit 4 leftmost. The
+           mapping below takes index 9 first, so present the two the other way round. */
+        uint16_t patt_l = dev->accel.multifunc[8];
+        uint16_t patt_h = dev->accel.multifunc[9];
+        if (ATI_GRAPHICS_ULTRA) {
+            dev->accel.multifunc[8] = patt_h;
+            dev->accel.multifunc[9] = patt_l;
+        }
         mix_dat = 0;
         if (cmd == 6) {
             if (and3_blt == 3) {
@@ -1322,6 +1331,10 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                 if (dev->accel.multifunc[9] & 0x10)
                     mix_dat |= 0x80;
             }
+        }
+        if (ATI_GRAPHICS_ULTRA) {
+            dev->accel.multifunc[8] = patt_l;
+            dev->accel.multifunc[9] = patt_h;
         }
     }
 
