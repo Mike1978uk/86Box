@@ -536,22 +536,22 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         compare = 1;
                                         break;
                                     case 2:
-                                        compare = (dest_dat >= dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat >= dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 3:
-                                        compare = (dest_dat < dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat < dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 4:
-                                        compare = (dest_dat != dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat != dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 5:
-                                        compare = (dest_dat == dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat == dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 6:
-                                        compare = (dest_dat <= dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat <= dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 7:
-                                        compare = (dest_dat > dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat > dest_cmp_clr) ? 1 : 0;
                                         break;
 
                                     default:
@@ -742,22 +742,22 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         compare = 1;
                                         break;
                                     case 2:
-                                        compare = (dest_dat >= dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat >= dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 3:
-                                        compare = (dest_dat < dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat < dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 4:
-                                        compare = (dest_dat != dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat != dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 5:
-                                        compare = (dest_dat == dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat == dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 6:
-                                        compare = (dest_dat <= dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat <= dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 7:
-                                        compare = (dest_dat > dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat > dest_cmp_clr) ? 1 : 0;
                                         break;
 
                                     default:
@@ -1247,22 +1247,22 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     compare = 1;
                                     break;
                                 case 2:
-                                    compare = (dest_dat >= dest_cmp_clr) ? 0 : 1;
+                                    compare = (dest_dat >= dest_cmp_clr) ? 1 : 0;
                                     break;
                                 case 3:
-                                    compare = (dest_dat < dest_cmp_clr) ? 0 : 1;
+                                    compare = (dest_dat < dest_cmp_clr) ? 1 : 0;
                                     break;
                                 case 4:
-                                    compare = (dest_dat != dest_cmp_clr) ? 0 : 1;
+                                    compare = (dest_dat != dest_cmp_clr) ? 1 : 0;
                                     break;
                                 case 5:
-                                    compare = (dest_dat == dest_cmp_clr) ? 0 : 1;
+                                    compare = (dest_dat == dest_cmp_clr) ? 1 : 0;
                                     break;
                                 case 6:
-                                    compare = (dest_dat <= dest_cmp_clr) ? 0 : 1;
+                                    compare = (dest_dat <= dest_cmp_clr) ? 1 : 0;
                                     break;
                                 case 7:
-                                    compare = (dest_dat > dest_cmp_clr) ? 0 : 1;
+                                    compare = (dest_dat > dest_cmp_clr) ? 1 : 0;
                                     break;
 
                                 default:
@@ -1493,22 +1493,22 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         compare = 1;
                                         break;
                                     case 2:
-                                        compare = (dest_dat >= dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat >= dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 3:
-                                        compare = (dest_dat < dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat < dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 4:
-                                        compare = (dest_dat != dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat != dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 5:
-                                        compare = (dest_dat == dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat == dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 6:
-                                        compare = (dest_dat <= dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat <= dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 7:
-                                        compare = (dest_dat > dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat > dest_cmp_clr) ? 1 : 0;
                                         break;
 
                                     default:
@@ -1628,22 +1628,22 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                             compare = 1;
                                             break;
                                         case 2:
-                                            compare = (dest_dat >= dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat >= dest_cmp_clr) ? 1 : 0;
                                             break;
                                         case 3:
-                                            compare = (dest_dat < dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat < dest_cmp_clr) ? 1 : 0;
                                             break;
                                         case 4:
-                                            compare = (dest_dat != dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat != dest_cmp_clr) ? 1 : 0;
                                             break;
                                         case 5:
-                                            compare = (dest_dat == dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat == dest_cmp_clr) ? 1 : 0;
                                             break;
                                         case 6:
-                                            compare = (dest_dat <= dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat <= dest_cmp_clr) ? 1 : 0;
                                             break;
                                         case 7:
-                                            compare = (dest_dat > dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat > dest_cmp_clr) ? 1 : 0;
                                             break;
 
                                         default:
@@ -1752,22 +1752,22 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         compare = 1;
                                         break;
                                     case 2:
-                                        compare = (dest_dat >= dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat >= dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 3:
-                                        compare = (dest_dat < dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat < dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 4:
-                                        compare = (dest_dat != dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat != dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 5:
-                                        compare = (dest_dat == dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat == dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 6:
-                                        compare = (dest_dat <= dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat <= dest_cmp_clr) ? 1 : 0;
                                         break;
                                     case 7:
-                                        compare = (dest_dat > dest_cmp_clr) ? 0 : 1;
+                                        compare = (dest_dat > dest_cmp_clr) ? 1 : 0;
                                         break;
 
                                     default:
@@ -1888,22 +1888,22 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                             compare = 1;
                                             break;
                                         case 2:
-                                            compare = (dest_dat >= dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat >= dest_cmp_clr) ? 1 : 0;
                                             break;
                                         case 3:
-                                            compare = (dest_dat < dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat < dest_cmp_clr) ? 1 : 0;
                                             break;
                                         case 4:
-                                            compare = (dest_dat != dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat != dest_cmp_clr) ? 1 : 0;
                                             break;
                                         case 5:
-                                            compare = (dest_dat == dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat == dest_cmp_clr) ? 1 : 0;
                                             break;
                                         case 6:
-                                            compare = (dest_dat <= dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat <= dest_cmp_clr) ? 1 : 0;
                                             break;
                                         case 7:
-                                            compare = (dest_dat > dest_cmp_clr) ? 0 : 1;
+                                            compare = (dest_dat > dest_cmp_clr) ? 1 : 0;
                                             break;
 
                                         default:
@@ -2144,22 +2144,22 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 compare = 1;
                                 break;
                             case 2:
-                                compare = (dest_dat >= dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat >= dest_cmp_clr) ? 1 : 0;
                                 break;
                             case 3:
-                                compare = (dest_dat < dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat < dest_cmp_clr) ? 1 : 0;
                                 break;
                             case 4:
-                                compare = (dest_dat != dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat != dest_cmp_clr) ? 1 : 0;
                                 break;
                             case 5:
-                                compare = (dest_dat == dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat == dest_cmp_clr) ? 1 : 0;
                                 break;
                             case 6:
-                                compare = (dest_dat <= dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat <= dest_cmp_clr) ? 1 : 0;
                                 break;
                             case 7:
-                                compare = (dest_dat > dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat > dest_cmp_clr) ? 1 : 0;
                                 break;
 
                             default:
@@ -2307,22 +2307,22 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 compare = 1;
                                 break;
                             case 2:
-                                compare = (dest_dat >= dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat >= dest_cmp_clr) ? 1 : 0;
                                 break;
                             case 3:
-                                compare = (dest_dat < dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat < dest_cmp_clr) ? 1 : 0;
                                 break;
                             case 4:
-                                compare = (dest_dat != dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat != dest_cmp_clr) ? 1 : 0;
                                 break;
                             case 5:
-                                compare = (dest_dat == dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat == dest_cmp_clr) ? 1 : 0;
                                 break;
                             case 6:
-                                compare = (dest_dat <= dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat <= dest_cmp_clr) ? 1 : 0;
                                 break;
                             case 7:
-                                compare = (dest_dat > dest_cmp_clr) ? 0 : 1;
+                                compare = (dest_dat > dest_cmp_clr) ? 1 : 0;
                                 break;
 
                             default:
