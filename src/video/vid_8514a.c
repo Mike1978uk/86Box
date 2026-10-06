@@ -2115,6 +2115,100 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
             /* Graphics Ultra, command 3 (TEST.COM TS1 op 91 on the real card): the major axis runs DOWN
                each column (MAJ_AXIS_PCNT, less one with LAST_PIXEL off), then the next column, MIN_AXIS + 1
                columns. With CPU data each word carries two pixels in this mode. */
+            /* Graphics Ultra, command 4 (M8NIB on the real card): the rectangle (MIN+1 wide, MAJ+1 tall,
+               LAST_PIXEL ignored) is cut into 4-pixel columns aligned to X mod 4. Each data byte fills one
+               row of one column; the first column runs one way in Y, the next the other way. BYTE_SEQ set:
+               two bytes per word, high first; clear: one byte per word, the low one. */
+            if (ATI_GRAPHICS_ULTRA && (cmd == 4)) {
+                int xstep = (dev->accel.cmd & 0x20) ? 1 : -1;
+                int nbytes;
+                if (!cpu_input) {
+                    dev->accel.cx = dev->accel.cur_x;
+                    if (dev->accel.cur_x >= 0x600)
+                        dev->accel.cx |= ~0x5ff;
+                    dev->accel.cy = dev->accel.cur_y;
+                    if (dev->accel.cur_y >= 0x600)
+                        dev->accel.cy |= ~0x5ff;
+                    dev->accel.dx = dev->accel.cx;                                  /*first pixel X*/
+                    dev->accel.dy = dev->accel.cy;                                  /*first row*/
+                    dev->accel.cx = dev->accel.dx + xstep * (dev->accel.multifunc[0] & 0x7ff); /*last pixel X*/
+                    dev->accel.sx = dev->accel.dx & ~3;                             /*current nibble column*/
+                    if (xstep < 0)
+                        dev->accel.sx = dev->accel.dx | 3;
+                    dev->accel.sy = 0;                                              /*row within the column*/
+                    dev->accel.x_count = 0;                                         /*column number*/
+                    dev->accel.output = dev->accel.output2 = dev->accel.output3 = 0;
+                    dev->accel.input = dev->accel.input2 = dev->accel.input3 = 0;
+                    if (ibm8514_cpu_src(svga)) {
+                        dev->force_busy = 1;
+                        dev->force_busy2 = 1;
+                        dev->data_available  = 0;
+                        dev->data_available2 = 0;
+                        return; /*Wait for data from CPU*/
+                    }
+                    nbytes = 0x7fffffff;
+                } else
+                    nbytes = (dev->accel.cmd & 0x200) ? 2 : 1;
+
+                {
+                    int rows = (dev->accel.maj_axis_pcnt & 0x7ff) + 1;
+                    int xlo  = (xstep > 0) ? dev->accel.dx : dev->accel.cx;
+                    int xhi  = (xstep > 0) ? dev->accel.cx : dev->accel.dx;
+                    int k    = 0;
+                    while (nbytes--) {
+                        int down = (dev->accel.cmd & 0x80) ? !(dev->accel.x_count & 1) : (dev->accel.x_count & 1);
+                        int y    = down ? (dev->accel.dy + dev->accel.sy) : (dev->accel.dy + rows - 1 - dev->accel.sy);
+                        int nx0  = dev->accel.sx & ~3;
+                        uint16_t byte;
+                        if (!cpu_input)
+                            byte = frgd_color;
+                        else if (dev->accel.cmd & 0x200)
+                            byte = (k++ ? cpu_dat : (cpu_dat >> 8)) & 0xff;
+                        else
+                            byte = cpu_dat & 0xff;
+                        if (!(dev->accel.cmd & 0x80))
+                            y = down ? (dev->accel.dy - dev->accel.sy) : (dev->accel.dy - rows + 1 + dev->accel.sy);
+                        for (int x = nx0; x < nx0 + 4; x++) {
+                            if ((x < xlo) || (x > xhi))
+                                continue;
+                            if ((x >= clip_l) && (x <= clip_r) && (y >= clip_t) && (y <= clip_b)) {
+                                switch ((mix_dat & mix_mask) ? frgd_mix : bkgd_mix) {
+                                    case 0:
+                                        src_dat = bkgd_color;
+                                        break;
+                                    case 1:
+                                        src_dat = frgd_color;
+                                        break;
+                                    case 2:
+                                        src_dat = byte;
+                                        break;
+                                    default:
+                                        src_dat = 0;
+                                        break;
+                                }
+                                READ((y * dev->pitch) + x, dest_dat);
+                                old_dest_dat = dest_dat;
+                                MIX(mix_dat & mix_mask, dest_dat, src_dat);
+                                dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
+                                WRITE((y * dev->pitch) + x, dest_dat);
+                            }
+                        }
+                        if (++dev->accel.sy >= rows) {
+                            dev->accel.sy = 0;
+                            dev->accel.x_count++;
+                            dev->accel.sx += 4 * xstep;
+                            if (((xstep > 0) && ((dev->accel.sx & ~3) > xhi)) || ((xstep < 0) && ((dev->accel.sx | 3) < xlo))) {
+                                dev->force_busy = 0;
+                                dev->force_busy2 = 0;
+                                dev->fifo_idx = 0;
+                                dev->accel.cmd_back = 1;
+                                return;
+                            }
+                        }
+                    }
+                }
+                break;
+            }
             if (ATI_GRAPHICS_ULTRA && (cmd == 3)) {
                 if (!cpu_input) {
                     dev->accel.cx = dev->accel.cur_x;
