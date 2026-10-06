@@ -4515,10 +4515,14 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
                             mach_log(mach->log,"IBM transfer.\n");
 
-                            /* Graphics Ultra (M8ROW3 on the real card): a rectangle fed from the CPU
-                               with the 16-bit bit clear and BYTE_SEQ set takes the first pixel from
-                               the high byte, as reads do. Lines with the same bits already match. */
-                            if (ATI_GRAPHICS_ULTRA && (((dev->accel.cmd >> 13) == 2) || ((dev->accel.cmd >> 13) == 3)) &&
+                            /* Graphics Ultra (M8ROW3 and M8SEQ on the real card): with 16-bit host data
+                               (CMD bit 9) and LSB_FIRST (bit 12) clear, a rectangle or blit takes its first
+                               pixel from the high byte, as does a line or short stroke whose colour is host data.
+                               A line whose monochrome source is the host keeps the low byte first. Command 4
+                               orders its own bytes. */
+                            if (ATI_GRAPHICS_ULTRA &&
+                                (((dev->accel.cmd >> 13) == 2) || ((dev->accel.cmd >> 13) == 3) || ((dev->accel.cmd >> 13) == 6) ||
+                                 ((((dev->accel.cmd >> 13) == 0) || ((dev->accel.cmd >> 13) == 1) || ((dev->accel.cmd >> 13) == 5)) && (((dev->accel.multifunc[0x0a] >> 6) & 3) != 2))) &&
                                 !(dev->accel.cmd & 0x1000) && (dev->accel.cmd & 0x200))
                                 val = ((val >> 8) | (val << 8)) & 0xffff;
 
@@ -4568,10 +4572,14 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
                             mach_log(mach->log,"IBM transfer.\n");
 
-                            /* Graphics Ultra (M8ROW3 on the real card): a rectangle fed from the CPU
-                               with the 16-bit bit clear and BYTE_SEQ set takes the first pixel from
-                               the high byte, as reads do. Lines with the same bits already match. */
-                            if (ATI_GRAPHICS_ULTRA && (((dev->accel.cmd >> 13) == 2) || ((dev->accel.cmd >> 13) == 3)) &&
+                            /* Graphics Ultra (M8ROW3 and M8SEQ on the real card): with 16-bit host data
+                               (CMD bit 9) and LSB_FIRST (bit 12) clear, a rectangle or blit takes its first
+                               pixel from the high byte, as does a line or short stroke whose colour is host data.
+                               A line whose monochrome source is the host keeps the low byte first. Command 4
+                               orders its own bytes. */
+                            if (ATI_GRAPHICS_ULTRA &&
+                                (((dev->accel.cmd >> 13) == 2) || ((dev->accel.cmd >> 13) == 3) || ((dev->accel.cmd >> 13) == 6) ||
+                                 ((((dev->accel.cmd >> 13) == 0) || ((dev->accel.cmd >> 13) == 1) || ((dev->accel.cmd >> 13) == 5)) && (((dev->accel.multifunc[0x0a] >> 6) & 3) != 2))) &&
                                 !(dev->accel.cmd & 0x1000) && (dev->accel.cmd & 0x200))
                                 val = ((val >> 8) | (val << 8)) & 0xffff;
 
