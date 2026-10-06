@@ -876,7 +876,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
             }
             if (!cpu_input) {
                 if (1) /*DIAGNOSTIC, not for upstream*/
-                    pclog("[M8B] start cur=%d,%d dyend=%d dpc=%04x\n", dev->accel.cur_x, dev->accel.cur_y, mach->accel.dest_y_end, mach->accel.dp_config);
+                    pclog("[M8B] start cur=%d,%d dyend=%d dpc=%04x dpitch=%d doff=%d clip %d,%d-%d,%d compat=%d\n", dev->accel.cur_x, dev->accel.cur_y, mach->accel.dest_y_end, mach->accel.dp_config, mach->accel.dst_pitch, mach->accel.dst_ge_offset, clip_l, clip_t, clip_r, clip_b, mach->accel.dp_compat);
                 mach->accel.stepx = 0;
                 mach->accel.stepy = 0;
 
