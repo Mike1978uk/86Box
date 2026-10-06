@@ -4517,7 +4517,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                             /* Graphics Ultra (M8ROW3 on the real card): a rectangle fed from the CPU
                                with the 16-bit bit clear and BYTE_SEQ set takes the first pixel from
                                the high byte, as reads do. Lines with the same bits already match. */
-                            if (ATI_GRAPHICS_ULTRA && ((dev->accel.cmd >> 13) == 2) &&
+                            if (ATI_GRAPHICS_ULTRA && (((dev->accel.cmd >> 13) == 2) || ((dev->accel.cmd >> 13) == 3)) &&
                                 !(dev->accel.cmd & 0x1000) && (dev->accel.cmd & 0x200))
                                 val = ((val >> 8) | (val << 8)) & 0xffff;
 
@@ -4570,7 +4570,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                             /* Graphics Ultra (M8ROW3 on the real card): a rectangle fed from the CPU
                                with the 16-bit bit clear and BYTE_SEQ set takes the first pixel from
                                the high byte, as reads do. Lines with the same bits already match. */
-                            if (ATI_GRAPHICS_ULTRA && ((dev->accel.cmd >> 13) == 2) &&
+                            if (ATI_GRAPHICS_ULTRA && (((dev->accel.cmd >> 13) == 2) || ((dev->accel.cmd >> 13) == 3)) &&
                                 !(dev->accel.cmd & 0x1000) && (dev->accel.cmd & 0x200))
                                 val = ((val >> 8) | (val << 8)) & 0xffff;
 

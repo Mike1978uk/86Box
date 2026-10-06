@@ -2112,6 +2112,76 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
         case 2: /*Rectangle fill (X direction)*/
         case 3: /*Rectangle fill (Y direction)*/
         case 4: /*Rectangle fill (Y direction using nibbles)*/
+            /* Graphics Ultra, command 3 (TEST.COM TS1 op 91 on the real card): the major axis runs DOWN
+               each column (MAJ_AXIS_PCNT, less one with LAST_PIXEL off), then the next column, MIN_AXIS + 1
+               columns. With CPU data each word carries two pixels in this mode. */
+            if (ATI_GRAPHICS_ULTRA && (cmd == 3)) {
+                if (!cpu_input) {
+                    dev->accel.cx = dev->accel.cur_x;
+                    if (dev->accel.cur_x >= 0x600)
+                        dev->accel.cx |= ~0x5ff;
+                    dev->accel.cy = dev->accel.cur_y;
+                    if (dev->accel.cur_y >= 0x600)
+                        dev->accel.cy |= ~0x5ff;
+                    dev->accel.dy = dev->accel.cy;                      /*top of each column*/
+                    dev->accel.sx = ibm8514_rect_width(dev);            /*pixels left in this column, less one*/
+                    dev->accel.sy = dev->accel.multifunc[0] & 0x7ff;    /*columns left, less one*/
+                    dev->accel.output = dev->accel.output2 = dev->accel.output3 = 0;
+                    dev->accel.input = dev->accel.input2 = dev->accel.input3 = 0;
+                    if (ibm8514_cpu_src(svga)) {
+                        dev->force_busy = 1;
+                        dev->force_busy2 = 1;
+                        dev->data_available  = 0;
+                        dev->data_available2 = 0;
+                        return; /*Wait for data from CPU*/
+                    }
+                    count = 0x7fffffff;
+                } else
+                    count = (dev->accel.cmd & 0x200) ? 2 : 1;
+
+                while (count-- && (dev->accel.sy >= 0)) {
+                    if ((dev->accel.cx >= clip_l) && (dev->accel.cx <= clip_r) &&
+                        (dev->accel.cy >= clip_t) && (dev->accel.cy <= clip_b)) {
+                        switch ((mix_dat & mix_mask) ? frgd_mix : bkgd_mix) {
+                            case 0:
+                                src_dat = bkgd_color;
+                                break;
+                            case 1:
+                                src_dat = frgd_color;
+                                break;
+                            case 2:
+                                src_dat = cpu_dat & 0xff;
+                                break;
+                            default:
+                                src_dat = 0;
+                                break;
+                        }
+                        READ((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                        old_dest_dat = dest_dat;
+                        MIX(mix_dat & mix_mask, dest_dat, src_dat);
+                        dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
+                        WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                    }
+                    mix_dat <<= 1;
+                    mix_dat |= 1;
+                    cpu_dat >>= 8;
+
+                    dev->accel.cy += (dev->accel.cmd & 0x80) ? 1 : -1;
+                    if (--dev->accel.sx < 0) {
+                        dev->accel.sx = ibm8514_rect_width(dev);
+                        dev->accel.cy = dev->accel.dy;
+                        dev->accel.cx += (dev->accel.cmd & 0x20) ? 1 : -1;
+                        if (--dev->accel.sy < 0) {
+                            dev->force_busy = 0;
+                            dev->force_busy2 = 0;
+                            dev->fifo_idx = 0;
+                            dev->accel.cmd_back = 1;
+                            return;
+                        }
+                    }
+                }
+                break;
+            }
             if (dev->on && !cpu_input) pclog("[M8P] rect cmd=%04x pixcntl=%03x cur=%d,%d\n", dev->accel.cmd, dev->accel.multifunc[0x0a], dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
             if (!cpu_input) {
                 dev->accel.x_count = 0;
