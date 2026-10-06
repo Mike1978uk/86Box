@@ -1561,6 +1561,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
         /* On the Graphics Ultra a Bresenham line steps diagonally while the error term is not
            negative (M8SEQ); the comparison with MAJ_AXIS_PCNT is kept for the other chips. */
         case 1: /*Draw line*/
+            if (dev->on && !cpu_input) pclog("[M8L] start cmd=%04x cur=%d,%d maj=%d\n", dev->accel.cmd, dev->accel.cur_x, dev->accel.cur_y, dev->accel.maj_axis_pcnt); /*DIAGNOSTIC*/
             if (!cpu_input) {
                 dev->accel.x_count = 0;
 
@@ -1646,6 +1647,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->force_busy2 = 0;
                                 dev->fifo_idx = 0;
                                 dev->accel.cmd_back = 1;
+                                if (dev->on) pclog("[M8L] exit 0 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
                                 break;
                             }
 
@@ -1699,6 +1701,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->force_busy2 = 0;
                                 dev->fifo_idx = 0;
                                 dev->accel.cmd_back = 1;
+                                if (dev->on) pclog("[M8L] exit 1 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
                                 break;
                             }
 
@@ -1817,6 +1820,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->fifo_idx = 0;
                             }
                             dev->accel.cmd_back = 1;
+                            if (dev->on) pclog("[M8L] exit 2 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
                             if (!cpu_input) {
                                 dev->accel.cur_x = dev->accel.cx;
                                 dev->accel.cur_y = dev->accel.cy;
@@ -1942,6 +1946,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->fifo_idx = 0;
                             }
                             dev->accel.cmd_back = 1;
+                            if (dev->on) pclog("[M8L] exit 3 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
                             break;
                         }
 
@@ -2034,6 +2039,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->fifo_idx = 0;
                             }
                             dev->accel.cmd_back = 1;
+                            if (dev->on) pclog("[M8L] exit 4 cmd=%04x cpu=%d cx=%d cy=%d cur=%d,%d\n", dev->accel.cmd, cpu_input, dev->accel.cx, dev->accel.cy, dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
                             if (!cpu_input) {
                                 dev->accel.cur_x = dev->accel.cx;
                                 dev->accel.cur_y = dev->accel.cy;
