@@ -554,11 +554,11 @@ ibm8514_accel_out_fifo(svga_t *svga, uint16_t port, uint32_t val, int len)
             break;
 
         /* The Bresenham steps and error term are 13-bit two's complement on the Mach8:
-           1FFEh is -2 (M8SEQ on a Graphics Ultra). The Mach32 keeps 14 bits. */
+           1FFEh is -2 (M8SEQ on a Graphics Ultra). Other chips keep 14 bits. */
         case 0x8ae8:
             if (len == 2) {
                 dev->accel.desty       = val & 0x7ff;
-                dev->accel.desty_axstp = ATI_MACH32 ? ((val & 0x2000) ? (val | ~0x1fff) : (val & 0x1fff))
+                dev->accel.desty_axstp = !ATI_GRAPHICS_ULTRA ? ((val & 0x2000) ? (val | ~0x1fff) : (val & 0x1fff))
                                          : ((val & 0x1000) ? (val | ~0x0fff) : (val & 0x0fff));
             }
             break;
@@ -566,7 +566,7 @@ ibm8514_accel_out_fifo(svga_t *svga, uint16_t port, uint32_t val, int len)
         case 0x8ee8:
             if (len == 2) {
                 dev->accel.destx       = val & 0x7ff;
-                dev->accel.destx_distp = ATI_MACH32 ? ((val & 0x2000) ? (val | ~0x1fff) : (val & 0x1fff))
+                dev->accel.destx_distp = !ATI_GRAPHICS_ULTRA ? ((val & 0x2000) ? (val | ~0x1fff) : (val & 0x1fff))
                                          : ((val & 0x1000) ? (val | ~0x0fff) : (val & 0x0fff));
             }
             break;
@@ -574,7 +574,7 @@ ibm8514_accel_out_fifo(svga_t *svga, uint16_t port, uint32_t val, int len)
         case 0x92e8:
             if (len == 2) {
                 dev->test = val;
-                dev->accel.err_term = ATI_MACH32 ? ((val & 0x2000) ? (val | ~0x1fff) : (val & 0x1fff))
+                dev->accel.err_term = !ATI_GRAPHICS_ULTRA ? ((val & 0x2000) ? (val | ~0x1fff) : (val & 0x1fff))
                                       : ((val & 0x1000) ? (val | ~0x0fff) : (val & 0x0fff));
             }
             break;
@@ -1544,6 +1544,8 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
             dev->accel.cur_y = dev->accel.cy;
             break;
 
+        /* On the Graphics Ultra a Bresenham line steps diagonally while the error term is not
+           negative (M8SEQ); the comparison with MAJ_AXIS_PCNT is kept for the other chips. */
         case 1: /*Draw line*/
             if (!cpu_input) {
                 dev->accel.x_count = 0;
@@ -1935,7 +1937,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             else
                                 dev->accel.cy--;
 
-                            if (dev->accel.err_term >= dev->accel.maj_axis_pcnt) {
+                            if (ATI_GRAPHICS_ULTRA ? (dev->accel.err_term >= 0) : (dev->accel.err_term >= dev->accel.maj_axis_pcnt)) {
                                 dev->accel.err_term += dev->accel.destx_distp;
                                 if (dev->accel.cmd & 0x20)
                                     dev->accel.cx++;
@@ -1949,7 +1951,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             else
                                 dev->accel.cx--;
 
-                            if (dev->accel.err_term >= dev->accel.maj_axis_pcnt) {
+                            if (ATI_GRAPHICS_ULTRA ? (dev->accel.err_term >= 0) : (dev->accel.err_term >= dev->accel.maj_axis_pcnt)) {
                                 dev->accel.err_term += dev->accel.destx_distp;
                                 if (dev->accel.cmd & 0x80)
                                     dev->accel.cy++;
@@ -2031,7 +2033,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             else
                                 dev->accel.cy--;
 
-                            if (dev->accel.err_term >= dev->accel.maj_axis_pcnt) {
+                            if (ATI_GRAPHICS_ULTRA ? (dev->accel.err_term >= 0) : (dev->accel.err_term >= dev->accel.maj_axis_pcnt)) {
                                 dev->accel.err_term += dev->accel.destx_distp;
                                 if (dev->accel.cmd & 0x20)
                                     dev->accel.cx++;
@@ -2045,7 +2047,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             else
                                 dev->accel.cx--;
 
-                            if (dev->accel.err_term >= dev->accel.maj_axis_pcnt) {
+                            if (ATI_GRAPHICS_ULTRA ? (dev->accel.err_term >= 0) : (dev->accel.err_term >= dev->accel.maj_axis_pcnt)) {
                                 dev->accel.err_term += dev->accel.destx_distp;
                                 if (dev->accel.cmd & 0x80)
                                     dev->accel.cy++;
