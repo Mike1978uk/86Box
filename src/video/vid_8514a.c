@@ -2098,6 +2098,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
         case 2: /*Rectangle fill (X direction)*/
         case 3: /*Rectangle fill (Y direction)*/
         case 4: /*Rectangle fill (Y direction using nibbles)*/
+            if (dev->on && !cpu_input) pclog("[M8P] rect cmd=%04x pixcntl=%03x cur=%d,%d\n", dev->accel.cmd, dev->accel.multifunc[0x0a], dev->accel.cur_x, dev->accel.cur_y); /*DIAGNOSTIC*/
             if (!cpu_input) {
                 dev->accel.x_count = 0;
                 dev->accel.output = 0;
@@ -2668,6 +2669,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                         }
                     } else if ((dev->accel.multifunc[0x0a] & 0x06) == 0x04) { /*Polygon Draw Type A*/
                         ibm8514_log(dev->log,"Polygon Draw Type A: Clipping: L=%d, R=%d, T=%d, B=%d, C(%d,%d), sx=%d, sy=%d.\n", clip_l, clip_r, clip_t, clip_b, dev->accel.cx, dev->accel.cy, dev->accel.sx, dev->accel.sy);
+                        if (dev->on) pclog("[M8P] polyA cmd=%04x cur=%d,%d sx=%d sy=%d rdm=%02x wm=%02x cpu=%d\n", dev->accel.cmd, dev->accel.cx, dev->accel.cy, dev->accel.sx, dev->accel.sy, rd_mask_polygon, wrt_mask, cpu_input); /*DIAGNOSTIC*/
                         while (count-- && (dev->accel.sy >= 0)) {
                             if ((dev->accel.cx >= clip_l) &&
                                 (dev->accel.cx <= clip_r) &&
