@@ -337,6 +337,18 @@ mach_pixel_read(mach_t *mach)
     return 1;
 }
 
+/* Graphics Ultra (M8ROW3 on the real card; Mach32 guide, PATT_DATA): a linear monochrome
+   pattern is PATT_LENGTH + 1 bits taken from PATT_DATA_10 onward, starting at PATT_INDEX and
+   not aligned to the destination. Each 16-bit word gives its bits MSB first. */
+static int
+mach_mono_patt_bit(mach_t *mach, int i)
+{
+    int pos  = (mach->accel.patt_idx + i) % (mach->accel.patt_len + 1);
+    int word = mach->accel.mono_pattern_normal[(pos >> 4) << 1] | (mach->accel.mono_pattern_normal[((pos >> 4) << 1) + 1] << 8);
+
+    return (word >> (15 - (pos & 15))) & 1;
+}
+
 static void
 mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint32_t cpu_dat, UNUSED(svga_t *svga), mach_t *mach, ibm8514_t *dev)
 {
@@ -2286,7 +2298,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
             if (mono_src == 1) {
                 count               = mach->accel.width;
                 mix_dat             = mach->accel.mono_pattern_normal[0];
-                dev->accel.temp_cnt = 8;
+                dev->accel.temp_cnt = ATI_GRAPHICS_ULTRA ? 0 : 8; /*Graphics Ultra: pattern bit number*/
             }
 
             /*DIAGNOSTIC, not for upstream*/
@@ -2301,6 +2313,10 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         mix = 1;
                         break;
                     case 1:
+                        if (ATI_GRAPHICS_ULTRA) {
+                            mix = mach_mono_patt_bit(mach, dev->accel.temp_cnt++);
+                            break;
+                        }
                         if (!dev->accel.temp_cnt) {
                             dev->accel.temp_cnt = 8;
                             mix_dat >>= 8;
