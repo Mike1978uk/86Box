@@ -91,6 +91,7 @@ typedef struct mach_t {
         int16_t  line_array[6];
         uint8_t  patt_idx;
         uint8_t  patt_len;
+        int      ssv_wait; /*Graphics Ultra: second short stroke waiting for host data*/
         uint8_t  pix_trans[2];
         uint8_t  alu_bg_fn;
         uint8_t  alu_fg_fn;

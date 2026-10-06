@@ -4097,6 +4097,20 @@ mach32_recalctimings(svga_t *svga)
     svga->hoverride = 1;
 }
 
+/* Graphics Ultra (M8ROW3 on the real card): runs the short stroke in progress to its end, every
+   remaining pixel taking BYTE as its host data. */
+static void
+mach_ssv_drain(svga_t *svga, ibm8514_t *dev, uint8_t byte)
+{
+    int last;
+    int guard = 64;
+
+    do {
+        last = (dev->accel.ssv_len <= 0);
+        ibm8514_accel_start(8, 1, 0xffffffff, byte, svga, 2); /*host data counts in bits*/
+    } while (!last && guard--);
+}
+
 static void
 mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, uint16_t val, int len)
 {
@@ -4170,6 +4184,15 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
     }
 
     mach_log(mach->log, "[%04X:%08X]: Port FIFO OUT=%04x, val=%04x, len=%d.\n", CS, cpu_state.pc, port, val, len);
+
+    /* Graphics Ultra (M8ROW3 on the real card): a short stroke waiting for host data takes the
+       low byte of the next FIFO entry that is not PIX_TRANS for all its remaining pixels, and
+       that entry still goes to its own register. */
+    if (ATI_GRAPHICS_ULTRA && mach->accel.ssv_wait && (port != 0xe2e8)) {
+        mach->accel.ssv_wait = 0;
+        if (dev->force_busy)
+            mach_ssv_drain(svga, dev, val & 0xff);
+    }
 
     switch (port) {
         case 0x2e8:
@@ -4510,6 +4533,28 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             break;
 
         case 0x9ee8:
+            /* Graphics Ultra (M8ROW3 on the real card): with host data selected, the first vector
+               of the pair does not wait for it - its pixels take the low byte of this word, as the
+               Mach32 guide warns. The second vector waits for PIX_TRANS. */
+            if (ATI_GRAPHICS_ULTRA && (len == 2) && (dev->accel.cmd & 0x100) && ibm8514_cpu_src(svga)) {
+                uint8_t first  = (dev->accel.cmd & 0x1000) ? (val & 0xff) : (val >> 8);
+                uint8_t second = (dev->accel.cmd & 0x1000) ? (val >> 8) : (val & 0xff);
+
+                dev->accel.ssv_state    = 1;
+                dev->accel.short_stroke = val;
+                dev->accel.cx           = dev->accel.cur_x;
+                if (dev->accel.cur_x >= 0x600)
+                    dev->accel.cx |= ~0x5ff;
+                dev->accel.cy = dev->accel.cur_y;
+                if (dev->accel.cur_y >= 0x600)
+                    dev->accel.cy |= ~0x5ff;
+                ibm8514_short_stroke_start(-1, 0, -1, 0, svga, first, len);
+                mach_ssv_drain(svga, dev, val & 0xff);
+                dev->accel.cmd_back = 0; /*the first vector finishing must not end the command*/
+                ibm8514_short_stroke_start(-1, 0, -1, 0, svga, second, len);
+                mach->accel.ssv_wait = 1;
+                break;
+            }
             ibm8514_accel_out_fifo(svga, port, val, len);
             break;
 
