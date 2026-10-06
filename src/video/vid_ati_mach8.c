@@ -6343,6 +6343,7 @@ ati8514_accel_outl(uint16_t port, uint32_t val, void *priv)
 
 /*DIAGNOSTIC, not for upstream: trace TEST.COM's Video RAM stage, armed by its 006B mix write.*/
 static int m8t_left = -1;
+static int m8r_left = 0;
 
 static void
 m8t(const char *dir, uint16_t port, uint16_t val, int len)
@@ -6408,6 +6409,9 @@ mach_accel_outw(uint16_t port, uint16_t val, void *priv)
         pclog("[M8W] [%04X:%04X] OUTW %04x=%04x fifo=%d test=%d\n", CS, cpu_state.pc, port, val, dev->fifo_idx, mach->fifo_test_idx);
     if ((port == 0xbae8) && (val == 0x6b) && (m8t_left <= 0) && dev->on)
         m8t_left = 3000;
+    /*DIAGNOSTIC: Test Sequence 1 starts with scissor top = -2; log its PIX_TRANS reads.*/
+    if ((port == 0xbee8) && (val == 0x17fe) && dev->on)
+        m8r_left = 64;
     /*DIAGNOSTIC: arm on the RAM Addressing stage's first SCAN_TO_X, dump its corner pixels when it switches to the fold.*/
     if ((port == 0xcaee) && (m8t_left <= 0) && dev->on)
         m8t_left = 20000;
@@ -6580,6 +6584,10 @@ mach_accel_inw(uint16_t port, void *priv)
     if (mach->local_cntl & 0x10)
         pclog("[M8W] [%04X:%04X] INW  %04x=%04x fifo=%d test=%d\n", CS, cpu_state.pc, port, temp, ((ibm8514_t *) svga->dev8514)->fifo_idx, mach->fifo_test_idx);
     m8t("IN", port, temp, 2);
+    if ((port == 0xe2e8) && (m8r_left > 0)) {
+        pclog("[M8R] %04x\n", temp);
+        m8r_left--;
+    }
     mach_log(mach->log,"%04X:%08X: INW port=%04x, temp=%04x.\n", CS, cpu_state.pc, port, temp);
     return temp;
 }
