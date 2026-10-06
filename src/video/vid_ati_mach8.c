@@ -1476,6 +1476,10 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
 
             count = (dev->accel.dx > dev->accel.dy) ? (dev->accel.dx >> 1) : (dev->accel.dy >> 1);
             mach->accel.width = count;
+            /* Graphics Ultra (M8ROW3 on the real card, TS1 op 112): the line reaches its end point;
+               LINEDRAW_OPT bit 2 decides whether that pixel is written. */
+            if (ATI_GRAPHICS_ULTRA)
+                count++;
 
             if (dev->accel.dx > dev->accel.dy) {
                 mach->accel.err = (dev->accel.dy - dev->accel.dx) >> 1;
