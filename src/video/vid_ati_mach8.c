@@ -337,6 +337,20 @@ mach_pixel_read(mach_t *mach)
     return 1;
 }
 
+/* Graphics Ultra (TS1 op 112 on the real card): DP_CONFIG foreground source 6, which the Mach32
+   guide does not list, takes host data like source 2; each host byte then picks the colour pattern
+   byte at (byte >> 2). Everything that waits for host data treats it as source 2. */
+static int
+mach_frgd_sel(mach_t *mach, ibm8514_t *dev)
+{
+    int sel = (mach->accel.dp_config >> 13) & 7;
+
+    if (ATI_GRAPHICS_ULTRA && (sel == 6))
+        return 2;
+
+    return sel;
+}
+
 /* Graphics Ultra (M8ROW3 on the real card; Mach32 guide, PATT_DATA): a linear monochrome
    pattern is PATT_LENGTH + 1 bits taken from PATT_DATA_10 onward, starting at PATT_INDEX and
    not aligned to the destination. Each 16-bit word gives its bits MSB first. */
@@ -396,7 +410,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
        picks the side written: 0 writes those pixels, 1 the others. Bit 5 is ignored. */
     if (ATI_GRAPHICS_ULTRA && !dev->bpp && (mach->accel.dest_cmp_fn & 0x40))
         compare_mode = 8;
-    frgd_sel     = (mach->accel.dp_config >> 13) & 7;
+    frgd_sel     = mach_frgd_sel(mach, dev);
     bkgd_sel     = (mach->accel.dp_config >> 7) & 3;
     mono_src     = (mach->accel.dp_config >> 5) & 3;
 
@@ -2368,7 +2382,10 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 src_dat = frgd_color;
                                 break;
                             case 2:
-                                src_dat = cpu_dat;
+                                if (ATI_GRAPHICS_ULTRA && (((mach->accel.dp_config >> 13) & 7) == 6))
+                                    src_dat = mach->accel.color_pattern[((cpu_dat & 0xff) >> 2) & 0x1f];
+                                else
+                                    src_dat = cpu_dat;
                                 break;
                             case 3:
                                 READ(dev->accel.src + dev->accel.cx, src_dat);
@@ -2499,7 +2516,7 @@ mach_accel_out_pixtrans(svga_t *svga, mach_t *mach, ibm8514_t *dev, uint16_t val
     int mono_src;
     int swap = 0;
 
-    frgd_sel = (mach->accel.dp_config >> 13) & 7;
+    frgd_sel = mach_frgd_sel(mach, dev);
     bkgd_sel = (mach->accel.dp_config >> 7) & 3;
     mono_src = (mach->accel.dp_config >> 5) & 3;
     { static int m8e = 0; if (m8e < 40) { m8e++; pclog("[M8E] pixtrans val=%04x dpc=%04x cmdtype=%d cmd_back=%d cur=%d,%d dyend=%d\n", val, mach->accel.dp_config, mach->accel.cmd_type, dev->accel.cmd_back, dev->accel.cur_x, dev->accel.cur_y, mach->accel.dest_y_end); } } /*DIAGNOSTIC*/
@@ -4688,7 +4705,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                             break;
 
                         mach->accel.pix_trans[0] = val;
-                        frgd_sel = (mach->accel.dp_config >> 13) & 7;
+                        frgd_sel = mach_frgd_sel(mach, dev);
                         bkgd_sel = (mach->accel.dp_config >> 7) & 3;
                         mono_src = (mach->accel.dp_config >> 5) & 3;
 
@@ -5282,7 +5299,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 dev->data_available2 = 0;
                 mach->accel.cmd_type = 1;
 
-                frgd_sel = (mach->accel.dp_config >> 13) & 7;
+                frgd_sel = mach_frgd_sel(mach, dev);
                 bkgd_sel = (mach->accel.dp_config >> 7) & 3;
                 mono_src = (mach->accel.dp_config >> 5) & 3;
 
@@ -5339,7 +5356,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 mach_log(mach->log,".\n");
                 mach->accel.cmd_type = 2; /*Non-conforming BitBLT from dest_y_end register (0xaeee)*/
 
-                frgd_sel = (mach->accel.dp_config >> 13) & 7;
+                frgd_sel = mach_frgd_sel(mach, dev);
                 bkgd_sel = (mach->accel.dp_config >> 7) & 3;
                 mono_src = (mach->accel.dp_config >> 5) & 3;
 
@@ -5419,7 +5436,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             if (len == 2) {
                 mach->accel.cmd_type = 0;
                 mach_log(mach->log, "TODO: Short Stroke.\n");
-                frgd_sel = (mach->accel.dp_config >> 13) & 7;
+                frgd_sel = mach_frgd_sel(mach, dev);
                 bkgd_sel = (mach->accel.dp_config >> 7) & 3;
                 mono_src = (mach->accel.dp_config >> 5) & 3;
 
@@ -5442,7 +5459,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 mach_log(mach->log, "ScanToX len=%d, DX=%d, DY=%d.\n", val, dev->accel.cur_x, dev->accel.cur_y);
                 mach_log(mach->log,".\n");
 
-                frgd_sel = (mach->accel.dp_config >> 13) & 7;
+                frgd_sel = mach_frgd_sel(mach, dev);
                 bkgd_sel = (mach->accel.dp_config >> 7) & 3;
                 mono_src = (mach->accel.dp_config >> 5) & 3;
 
@@ -5488,7 +5505,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             mach->accel.patt_idx = val & 0x1f;
             if (ATI_GRAPHICS_ULTRA) /*M8ROW3 on the real card: the next pixel takes this pattern entry*/
                 mach->accel.color_pattern_idx = mach->accel.patt_idx;
-            frgd_sel = (mach->accel.dp_config >> 13) & 7;
+            frgd_sel = mach_frgd_sel(mach, dev);
 
             if ((frgd_sel == 5) && (dev->accel_bpp >= 24) && (mach->accel.patt_len == 0x17))
                 mach->accel.color_pattern_idx = 0;
@@ -5568,7 +5585,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 }
                 if ((mach->accel.line_idx == 3) || (mach->accel.line_idx == 5)) {
                     mach->accel.cmd_type = (mach->accel.line_idx == 5) ? 4 : 3;
-                    frgd_sel = (mach->accel.dp_config >> 13) & 7;
+                    frgd_sel = mach_frgd_sel(mach, dev);
                     bkgd_sel = (mach->accel.dp_config >> 7) & 3;
                     mono_src = (mach->accel.dp_config >> 5) & 3;
 
@@ -5650,7 +5667,7 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                 if (dev->force_busy) {
                     temp |= 0x0200; /*Hardware busy*/
                     if (mach->accel.cmd_type >= 0) {
-                        frgd_sel = (mach->accel.dp_config >> 13) & 7;
+                        frgd_sel = mach_frgd_sel(mach, dev);
                         bkgd_sel = (mach->accel.dp_config >> 7) & 3;
                         mono_src = (mach->accel.dp_config >> 5) & 3;
                         switch (mach->accel.cmd_type) {
@@ -5843,7 +5860,7 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                         READ_PIXTRANS_BYTE_IO(dev->accel.dx, 0)
 
                         temp = mach->accel.pix_trans[0];
-                        frgd_sel = (mach->accel.dp_config >> 13) & 7;
+                        frgd_sel = mach_frgd_sel(mach, dev);
                         bkgd_sel = (mach->accel.dp_config >> 7) & 3;
                         mono_src = (mach->accel.dp_config >> 5) & 3;
 
