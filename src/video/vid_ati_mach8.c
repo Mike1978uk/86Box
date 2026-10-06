@@ -5378,6 +5378,36 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
         case 0xc6ee:
             mach_log(mach->log, "C6EE.\n");
+            /* Graphics Ultra (M8ROW3 on the real card; Mach32 guide, EXT_SHORT_STROKE): two IBM
+               short stroke vectors, bits 15:8 first, each drawn as an extended degree-mode line
+               with the DP_CONFIG data path - colour patterns included. A move vector only moves. */
+            if (ATI_GRAPHICS_ULTRA && (len == 2)) {
+                uint16_t opt = mach->accel.linedraw_opt;
+
+                for (int i = 0; i < 2; i++) {
+                    uint8_t ssv = i ? (val & 0xff) : (val >> 8);
+                    int     n   = ssv & 0x0f;
+
+                    if (!(ssv & 0x10)) {
+                        static const int8_t sx[8] = { 1, 1, 0, -1, -1, -1, 0, 1 };
+                        static const int8_t sy[8] = { 0, -1, -1, -1, 0, 1, 1, 1 };
+
+                        dev->accel.cur_x = (dev->accel.cur_x + (sx[ssv >> 5] * n)) & 0x7ff;
+                        dev->accel.cur_y = (dev->accel.cur_y + (sy[ssv >> 5] * n)) & 0x7ff;
+                        continue;
+                    }
+                    mach->accel.linedraw_opt = (opt & ~0xe8) | (ssv & 0xe0) | 0x08;
+                    mach->accel.bres_count   = n;
+                    mach->accel.cmd_type     = 1;
+                    dev->data_available      = 0;
+                    dev->data_available2     = 0;
+                    dev->fifo_idx            = 0;
+                    dev->accel.cmd_back      = 1;
+                    mach_accel_start(mach->accel.cmd_type, 0, -1, -1, 0, svga, mach, dev);
+                }
+                mach->accel.linedraw_opt = opt;
+                break;
+            }
             if (len == 2) {
                 mach->accel.cmd_type = 0;
                 mach_log(mach->log, "TODO: Short Stroke.\n");
@@ -5448,6 +5478,8 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
         case 0xd6ee:
             mach->accel.patt_idx = val & 0x1f;
+            if (ATI_GRAPHICS_ULTRA) /*M8ROW3 on the real card: the next pixel takes this pattern entry*/
+                mach->accel.color_pattern_idx = mach->accel.patt_idx;
             frgd_sel = (mach->accel.dp_config >> 13) & 7;
 
             if ((frgd_sel == 5) && (dev->accel_bpp >= 24) && (mach->accel.patt_len == 0x17))
