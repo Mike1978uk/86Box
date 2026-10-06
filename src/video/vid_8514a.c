@@ -1113,6 +1113,20 @@ ibm8514_short_stroke_start(int count, int cpu_input, uint32_t mix_dat, uint32_t 
     ibm8514_accel_start(count, cpu_input, mix_dat, cpu_dat, svga, len);
 }
 
+/* Width of one rectangle row, less one: the loops count SX down to 0. On the Graphics Ultra
+   LAST_PIXEL off (CMD bit 2) shortens every row by one pixel, and the CPU data with it
+   (TEST.COM TS1 ops 85-87 on the real card). */
+static int
+ibm8514_rect_width(ibm8514_t *dev)
+{
+    int w = dev->accel.maj_axis_pcnt & 0x7ff;
+
+    if (ATI_GRAPHICS_ULTRA && (dev->accel.cmd & 0x04) && w)
+        w--;
+
+    return w;
+}
+
 void
 ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat, svga_t *svga, UNUSED(int len))
 {
@@ -2117,7 +2131,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                 if (dev->accel.cur_y >= 0x600)
                     dev->accel.cy |= ~0x5ff;
 
-                dev->accel.sx = dev->accel.maj_axis_pcnt & 0x7ff;
+                dev->accel.sx = ibm8514_rect_width(dev);
                 dev->accel.sy = dev->accel.multifunc[0] & 0x7ff;
 
                 ibm8514_log(dev->log,"CMD=%d, full=%04x, curx=%d, cury=%d, pixcntl=%x, frgdsel=%d, bkgdsel=%d, frgdmix=%02x, bkgdmix=%02x.\n",
@@ -2332,7 +2346,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dev->accel.x_count++;
                         }
                         if (dev->accel.sx < 0) {
-                            dev->accel.sx = dev->accel.maj_axis_pcnt & 0x7ff;
+                            dev->accel.sx = ibm8514_rect_width(dev);
                             dev->accel.x_count = 0;
                             if (dev->accel.output2)
                                 dev->accel.sx += and3;
@@ -2471,7 +2485,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                         }
 
                         if (dev->accel.sx < 0) {
-                            dev->accel.sx = dev->accel.maj_axis_pcnt & 0x7ff;
+                            dev->accel.sx = ibm8514_rect_width(dev);
                             dev->accel.x_count = 0;
                             if (dev->accel.input)
                                 dev->accel.odd_in = 1;
@@ -2562,7 +2576,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 dev->accel.sx--;
                                 if (dev->accel.sx < 0) {
-                                    dev->accel.sx = dev->accel.maj_axis_pcnt & 0x7ff;
+                                    dev->accel.sx = ibm8514_rect_width(dev);
 
                                     if (dev->accel.cmd & 0x20) {
                                         dev->accel.cx -= (dev->accel.sx + 1);
@@ -2639,7 +2653,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 dev->accel.sx--;
                                 if (dev->accel.sx < 0) {
-                                    dev->accel.sx = dev->accel.maj_axis_pcnt & 0x7ff;
+                                    dev->accel.sx = ibm8514_rect_width(dev);
 
                                     if (dev->accel.cmd & 0x20) {
                                         dev->accel.cx -= (dev->accel.sx + 1);
@@ -2708,8 +2722,6 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat &= ~rd_mask_polygon;
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                    if ((dev->accel.cmd & 0x04) && !dev->accel.sx)
-                                        dest_dat = old_dest_dat; /*LAST_PIXEL off: the last column is not drawn.*/
                                 } else {
                                     READ(dev->accel.dest + dev->accel.cx, poly_src);
                                     if ((poly_src & rd_mask_polygon) == rd_mask_polygon)
@@ -2771,7 +2783,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             dev->accel.sx--;
                             if (dev->accel.sx < 0) {
                                 dev->accel.fill_state = 0;
-                                dev->accel.sx = dev->accel.maj_axis_pcnt & 0x7ff;
+                                dev->accel.sx = ibm8514_rect_width(dev);
 
                                 if (dev->accel.cmd & 0x20)
                                     dev->accel.cx -= (dev->accel.sx + 1);
@@ -2851,7 +2863,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             dev->accel.sx--;
                             if (dev->accel.sx < 0) {
                                 dev->accel.fill_state = 0;
-                                dev->accel.sx = dev->accel.maj_axis_pcnt & 0x7ff;
+                                dev->accel.sx = ibm8514_rect_width(dev);
 
                                 if (dev->accel.cmd & 0x20)
                                     dev->accel.cx -= (dev->accel.sx + 1);
