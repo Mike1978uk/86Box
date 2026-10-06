@@ -4632,8 +4632,9 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
         case 0xb6e8:
         case 0xbae8:
             /* On the Graphics Ultra a FRGD_MIX write after DP_CONFIG hands the source
-               back to the 8514/A registers, as a CMD write does. */
-            if (ATI_GRAPHICS_ULTRA && (len == 2))
+               back to the 8514/A registers, as a CMD write does. The other registers in
+               this group do not (M8SRC). */
+            if (ATI_GRAPHICS_ULTRA && (port == 0xbae8) && (len == 2))
                 mach->accel.dp_compat = 1;
             ibm8514_accel_out_fifo(svga, port, val, len);
             break;
