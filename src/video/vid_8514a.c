@@ -553,30 +553,29 @@ ibm8514_accel_out_fifo(svga_t *svga, uint16_t port, uint32_t val, int len)
                 dev->accel.cur_x = val & 0x7ff;
             break;
 
+        /* The Bresenham steps and error term are 13-bit two's complement on the Mach8:
+           1FFEh is -2 (M8SEQ on a Graphics Ultra). The Mach32 keeps 14 bits. */
         case 0x8ae8:
             if (len == 2) {
                 dev->accel.desty       = val & 0x7ff;
-                dev->accel.desty_axstp = val & 0x3fff;
-                if (val & 0x2000)
-                    dev->accel.desty_axstp |= ~0x1fff;
+                dev->accel.desty_axstp = ATI_MACH32 ? ((val & 0x2000) ? (val | ~0x1fff) : (val & 0x1fff))
+                                         : ((val & 0x1000) ? (val | ~0x0fff) : (val & 0x0fff));
             }
             break;
 
         case 0x8ee8:
             if (len == 2) {
                 dev->accel.destx       = val & 0x7ff;
-                dev->accel.destx_distp = val & 0x3fff;
-                if (val & 0x2000)
-                    dev->accel.destx_distp |= ~0x1fff;
+                dev->accel.destx_distp = ATI_MACH32 ? ((val & 0x2000) ? (val | ~0x1fff) : (val & 0x1fff))
+                                         : ((val & 0x1000) ? (val | ~0x0fff) : (val & 0x0fff));
             }
             break;
 
         case 0x92e8:
             if (len == 2) {
                 dev->test = val;
-                dev->accel.err_term = val & 0x3fff;
-                if (val & 0x2000)
-                    dev->accel.err_term |= ~0x1fff;
+                dev->accel.err_term = ATI_MACH32 ? ((val & 0x2000) ? (val | ~0x1fff) : (val & 0x1fff))
+                                      : ((val & 0x1000) ? (val | ~0x0fff) : (val & 0x0fff));
             }
             break;
 
