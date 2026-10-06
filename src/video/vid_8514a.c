@@ -1333,6 +1333,8 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
       When this bit is disabled, no writing to memory/reading from memory is allowed. (This bit is almost meaningless on
       the NOP command)*/
     switch (cmd) {
+        /* Lines and short strokes add X to the row address as an 11-bit unsigned value, so
+           X = -1 adds 2047: on a 1024 pitch that is X 1023 of the next row, not of the row above. */
         case 0: /*NOP (Short Stroke Vectors)*/
             if (dev->accel.ssv_state == 0)
                 break;
@@ -1363,7 +1365,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     break;
                             }
 
-                            READ((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                            READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
 
                             if ((compare_mode == 0) ||
                                 ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -1377,9 +1379,9 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                                 if (dev->accel.ssv_draw) {
                                     if ((dev->accel.cmd & 0x04) && dev->accel.ssv_len) {
-                                        WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                        WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                     } else if (!(dev->accel.cmd & 0x04)) {
-                                        WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                        WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                     }
                                 }
                             }
@@ -1465,7 +1467,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     break;
                             }
 
-                            READ((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                            READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
 
                             if ((compare_mode == 0) ||
                                 ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -1480,9 +1482,9 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 if (dev->accel.ssv_draw) {
                                     if ((dev->accel.cmd & 0x04) && dev->accel.ssv_len) {
-                                        WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                        WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                     } else if (!(dev->accel.cmd & 0x04)) {
-                                        WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                        WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                     }
                                 }
                             }
@@ -1753,7 +1755,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     break;
                             }
 
-                            READ((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                            READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
 
                             if ((compare_mode == 0) ||
                                 ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -1769,24 +1771,24 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     if (!(dev->accel.cmd & 0x1000)) {
                                         if (dev->accel.x_count >= and3) {
                                             if ((dev->accel.cmd & 0x04) && dev->accel.sy) {
-                                                WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                                WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                             } else if (!(dev->accel.cmd & 0x04)) {
-                                                WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                                WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                             }
                                         }
                                     } else {
                                         if ((dev->accel.cmd & 0x04) && dev->accel.sy) {
-                                            WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                         } else if (!(dev->accel.cmd & 0x04)) {
-                                            WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                         }
                                     }
                                 } else {
                                     if (ibm8514_cpu_src(svga) || !cpu_input) {
                                         if ((dev->accel.cmd & 0x04) && dev->accel.sy) {
-                                            WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                         } else if (!(dev->accel.cmd & 0x04)) {
-                                            WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                         }
                                     }
                                 }
@@ -1871,7 +1873,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             (dev->accel.cy <= clip_b)) {
                             dev->subsys_stat |= INT_GE_BSY;
                             if (ibm8514_cpu_dest(svga)) {
-                                READ((dev->accel.cy * dev->pitch) + dev->accel.cx, src_dat);
+                                READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), src_dat);
                             } else
                                 switch ((mix_dat & 0x01) ? frgd_mix : bkgd_mix) {
                                     case 0:
@@ -1891,7 +1893,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         break;
                                 }
 
-                            READ((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                            READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
 
                             if ((compare_mode == 0) ||
                                 ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -1904,9 +1906,9 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 MIX(mix_dat & 0x01, dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                                 if ((dev->accel.cmd & 0x04) && dev->accel.sy) {
-                                    WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                    WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                 } else if (!(dev->accel.cmd & 0x04)) {
-                                    WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                    WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                 }
                             }
                         }
@@ -1986,7 +1988,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         break;
                                 }
 
-                                READ((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
 
                                 if ((compare_mode == 0) ||
                                     ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -1998,7 +2000,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                    WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                                    WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
                                 }
                             }
                         }
