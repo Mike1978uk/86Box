@@ -875,7 +875,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 mono_src = (dev->accel.multifunc[0x0a] >> 6) & 3;
             }
             if (!cpu_input) {
-                if (dev->on) /*DIAGNOSTIC, not for upstream*/
+                if (1) /*DIAGNOSTIC, not for upstream*/
                     pclog("[M8B] start cur=%d,%d dyend=%d dpc=%04x\n", dev->accel.cur_x, dev->accel.cur_y, mach->accel.dest_y_end, mach->accel.dp_config);
                 mach->accel.stepx = 0;
                 mach->accel.stepy = 0;
@@ -2482,6 +2482,7 @@ mach_accel_out_pixtrans(svga_t *svga, mach_t *mach, ibm8514_t *dev, uint16_t val
     frgd_sel = (mach->accel.dp_config >> 13) & 7;
     bkgd_sel = (mach->accel.dp_config >> 7) & 3;
     mono_src = (mach->accel.dp_config >> 5) & 3;
+    { static int m8e = 0; if (m8e < 40) { m8e++; pclog("[M8E] pixtrans val=%04x dpc=%04x cmdtype=%d cmd_back=%d cur=%d,%d dyend=%d\n", val, mach->accel.dp_config, mach->accel.cmd_type, dev->accel.cmd_back, dev->accel.cur_x, dev->accel.cur_y, mach->accel.dest_y_end); } } /*DIAGNOSTIC*/
 
     if ((mach->accel.dp_config & 0x04) && (mach->accel.cmd_type != 5)) {
         mach_log(mach->log,"Read Host Monochrome Data.\n");
