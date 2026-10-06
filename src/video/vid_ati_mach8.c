@@ -2027,7 +2027,11 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                0x78AE starts with CEEE), which has DRAW clear and would suppress
                every pixel. Take the data path, the pitch and the offset from the
                8514/A side whenever the extended one has no draw enabled. */
-            compat_scan = mach->accel.dp_compat && !(mach->accel.dp_config & 0x10);
+            /* Graphics Ultra (M8SRC): only the order of the DP_CONFIG and FRGD_MIX writes decides. */
+            if (ATI_GRAPHICS_ULTRA)
+                compat_scan = mach->accel.dp_compat;
+            else
+                compat_scan = mach->accel.dp_compat && !(mach->accel.dp_config & 0x10);
             if (compat_scan) {
                 frgd_sel    = dev->accel.frgd_sel;
                 bkgd_sel    = dev->accel.bkgd_sel;
@@ -2444,6 +2448,10 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                     dev->force_busy2 = 0;
                     mach->force_busy = 0;
                     dev->accel.cmd_back = 1;
+                    /* Graphics Ultra (M8SRC, TEST.COM TS1): CUR_X ends one past the end pixel, so a
+                       second SCAN_TO_X to the next column draws nothing. An empty draw leaves it. */
+                    if (ATI_GRAPHICS_ULTRA)
+                        dev->accel.cur_x = dev->accel.dx + mach->accel.stepx;
                     return;
                 }
             }
