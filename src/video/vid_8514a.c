@@ -244,9 +244,9 @@ CLAMP(int16_t in, int16_t min, int16_t max)
                 break;                                                                                 \
             case 0x1f:                                                                                 \
                 if (dev->bpp)                                                                          \
-                    dest_dat = SATURATE_W((src_dat + dest_dat) >> 1);                                  \
+                    dest_dat = ((src_dat + dest_dat) > 0xffff) ? 0xffff : ((src_dat + dest_dat) >> 1); \
                 else                                                                                   \
-                    dest_dat = SATURATE_B((src_dat + dest_dat) >> 1);                                  \
+                    dest_dat = ((src_dat + dest_dat) > 0xff) ? 0xff : ((src_dat + dest_dat) >> 1);     \
                 break;                                                                                 \
         }                                                                                              \
     }
