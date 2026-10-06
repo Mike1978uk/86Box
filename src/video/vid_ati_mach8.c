@@ -379,6 +379,11 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
     }
 
     compare_mode = (mach->accel.dest_cmp_fn >> 3) & 7;
+    /* Graphics Ultra, 8 bpp, DEST_CMP_FN bit 6 (M8CMP on the real card): not a colour compare.
+       Bit 4 picks the nibble (0 high, 1 low), the test is "that nibble is 0 or F", and bit 3
+       picks the side written: 0 writes those pixels, 1 the others. Bit 5 is ignored. */
+    if (ATI_GRAPHICS_ULTRA && !dev->bpp && (mach->accel.dest_cmp_fn & 0x40))
+        compare_mode = 8;
     frgd_sel     = (mach->accel.dp_config >> 13) & 7;
     bkgd_sel     = (mach->accel.dp_config >> 7) & 3;
     mono_src     = (mach->accel.dp_config >> 5) & 3;
@@ -532,6 +537,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 READ(mach->accel.dst_ge_offset + (dev->accel.dy * mach->accel.dst_pitch) + dev->accel.dx, dest_dat);
 
                                 switch (compare_mode) {
+                                    case 8: {
+                                        int nib  = (mach->accel.dest_cmp_fn & 0x10) ? (dest_dat & 0x0f) : ((dest_dat >> 4) & 0x0f);
+                                        int edge = (nib == 0x00) || (nib == 0x0f);
+                                        compare  = (mach->accel.dest_cmp_fn & 0x08) ? edge : !edge;
+                                        break;
+                                    }
                                     case 1:
                                         compare = 1;
                                         break;
@@ -738,6 +749,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 READ(mach->accel.dst_ge_offset + (dev->accel.dy * mach->accel.dst_pitch) + dev->accel.dx, dest_dat);
 
                                 switch (compare_mode) {
+                                    case 8: {
+                                        int nib  = (mach->accel.dest_cmp_fn & 0x10) ? (dest_dat & 0x0f) : ((dest_dat >> 4) & 0x0f);
+                                        int edge = (nib == 0x00) || (nib == 0x0f);
+                                        compare  = (mach->accel.dest_cmp_fn & 0x08) ? edge : !edge;
+                                        break;
+                                    }
                                     case 1:
                                         compare = 1;
                                         break;
@@ -1243,6 +1260,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             }
 
                             switch (compare_mode) {
+                                case 8: {
+                                    int nib  = (mach->accel.dest_cmp_fn & 0x10) ? (dest_dat & 0x0f) : ((dest_dat >> 4) & 0x0f);
+                                    int edge = (nib == 0x00) || (nib == 0x0f);
+                                    compare  = (mach->accel.dest_cmp_fn & 0x08) ? edge : !edge;
+                                    break;
+                                }
                                 case 1:
                                     compare = 1;
                                     break;
@@ -1489,6 +1512,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
 
                                 switch (compare_mode) {
+                                    case 8: {
+                                        int nib  = (mach->accel.dest_cmp_fn & 0x10) ? (dest_dat & 0x0f) : ((dest_dat >> 4) & 0x0f);
+                                        int edge = (nib == 0x00) || (nib == 0x0f);
+                                        compare  = (mach->accel.dest_cmp_fn & 0x08) ? edge : !edge;
+                                        break;
+                                    }
                                     case 1:
                                         compare = 1;
                                         break;
@@ -1624,6 +1653,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
 
                                     switch (compare_mode) {
+                                        case 8: {
+                                            int nib  = (mach->accel.dest_cmp_fn & 0x10) ? (dest_dat & 0x0f) : ((dest_dat >> 4) & 0x0f);
+                                            int edge = (nib == 0x00) || (nib == 0x0f);
+                                            compare  = (mach->accel.dest_cmp_fn & 0x08) ? edge : !edge;
+                                            break;
+                                        }
                                         case 1:
                                             compare = 1;
                                             break;
@@ -1748,6 +1783,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
 
                                 switch (compare_mode) {
+                                    case 8: {
+                                        int nib  = (mach->accel.dest_cmp_fn & 0x10) ? (dest_dat & 0x0f) : ((dest_dat >> 4) & 0x0f);
+                                        int edge = (nib == 0x00) || (nib == 0x0f);
+                                        compare  = (mach->accel.dest_cmp_fn & 0x08) ? edge : !edge;
+                                        break;
+                                    }
                                     case 1:
                                         compare = 1;
                                         break;
@@ -1884,6 +1925,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
 
                                     switch (compare_mode) {
+                                        case 8: {
+                                            int nib  = (mach->accel.dest_cmp_fn & 0x10) ? (dest_dat & 0x0f) : ((dest_dat >> 4) & 0x0f);
+                                            int edge = (nib == 0x00) || (nib == 0x0f);
+                                            compare  = (mach->accel.dest_cmp_fn & 0x08) ? edge : !edge;
+                                            break;
+                                        }
                                         case 1:
                                             compare = 1;
                                             break;
@@ -2140,6 +2187,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         READ(dev->accel.dest + dev->accel.dx, dest_dat);
 
                         switch (compare_mode) {
+                            case 8: {
+                                int nib  = (mach->accel.dest_cmp_fn & 0x10) ? (dest_dat & 0x0f) : ((dest_dat >> 4) & 0x0f);
+                                int edge = (nib == 0x00) || (nib == 0x0f);
+                                compare  = (mach->accel.dest_cmp_fn & 0x08) ? edge : !edge;
+                                break;
+                            }
                             case 1:
                                 compare = 1;
                                 break;
@@ -2303,6 +2356,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         READ(dev->accel.dest + dev->accel.dx, dest_dat);
 
                         switch (compare_mode) {
+                            case 8: {
+                                int nib  = (mach->accel.dest_cmp_fn & 0x10) ? (dest_dat & 0x0f) : ((dest_dat >> 4) & 0x0f);
+                                int edge = (nib == 0x00) || (nib == 0x0f);
+                                compare  = (mach->accel.dest_cmp_fn & 0x08) ? edge : !edge;
+                                break;
+                            }
                             case 1:
                                 compare = 1;
                                 break;
