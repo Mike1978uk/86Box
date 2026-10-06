@@ -850,6 +850,13 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
             break;
 
         case 2: /*Non-conforming BitBLT from dest_y_end register (0xaeee)*/
+            /* Graphics Ultra: whichever of DP_CONFIG and the 8514/A mix registers was
+               written last chooses the source (M8ROW on the real card). */
+            if (ATI_GRAPHICS_ULTRA && mach->accel.dp_compat) {
+                frgd_sel = dev->accel.frgd_sel;
+                bkgd_sel = dev->accel.bkgd_sel;
+                mono_src = (dev->accel.multifunc[0x0a] >> 6) & 3;
+            }
             if (!cpu_input) {
                 if (dev->on) /*DIAGNOSTIC, not for upstream*/
                     pclog("[M8B] start cur=%d,%d dyend=%d dpc=%04x\n", dev->accel.cur_x, dev->accel.cur_y, mach->accel.dest_y_end, mach->accel.dp_config);
@@ -4557,6 +4564,10 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
         case 0xb2e8:
         case 0xb6e8:
         case 0xbae8:
+            /* On the Graphics Ultra a FRGD_MIX write after DP_CONFIG hands the source
+               back to the 8514/A registers, as a CMD write does. */
+            if (ATI_GRAPHICS_ULTRA && (len == 2))
+                mach->accel.dp_compat = 1;
             ibm8514_accel_out_fifo(svga, port, val, len);
             break;
 
