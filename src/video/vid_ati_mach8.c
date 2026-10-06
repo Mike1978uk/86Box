@@ -1359,8 +1359,11 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         mach->accel.src_cur_x = dev->accel.cx;
                         mach->accel.src_cur_y = dev->accel.cy;
                         mach->accel.src_cur_sx = mach->accel.sx;
+                        /* On the Graphics Ultra a blit from video memory also leaves the current
+                           position at its end: TEST.COM's next host-data blit starts there. */
                         if (mach->accel.dp_config != 0x6011) {
-                            if ((mono_src == 2) || (mono_src == 3) || (frgd_sel == 3) || (bkgd_sel == 3) || (mach->accel.dp_config & 0x02))
+                            if ((mono_src == 2) || (mono_src == 3) || (mach->accel.dp_config & 0x02) ||
+                                (!ATI_GRAPHICS_ULTRA && ((frgd_sel == 3) || (bkgd_sel == 3))))
                                 return;
                         }
                         if ((mono_src == 1) && (frgd_sel == 5) && (dev->accel_bpp == 24))
