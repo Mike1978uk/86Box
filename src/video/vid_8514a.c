@@ -2280,14 +2280,14 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                                     if (dev->accel.cmd & 0x02) {
                                         if (dev->accel.cmd & 0x1000) {
-                                            if ((dev->accel.cmd & 0x04) && dev->accel.sx) {
+                                            if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
                                                 WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
                                             } else if (!(dev->accel.cmd & 0x04)) {
                                                 WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
                                             }
                                         } else {
                                             if (dev->accel.x_count >= and3) {
-                                                if ((dev->accel.cmd & 0x04) && dev->accel.sx) {
+                                                if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
                                                     WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
                                                 } else if (!(dev->accel.cmd & 0x04)) {
                                                     WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
@@ -2295,7 +2295,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                             }
                                         }
                                     } else {
-                                        if ((dev->accel.cmd & 0x04) && dev->accel.sx) {
+                                        if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
                                             WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
                                         } else if (!(dev->accel.cmd & 0x04)) {
                                             WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
@@ -2437,14 +2437,14 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                                     if (dev->accel.cmd & 0x02) {
                                         if (dev->accel.cmd & 0x1000) {
-                                            if ((dev->accel.cmd & 0x04) && dev->accel.sx) {
+                                            if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
                                                 WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
                                             } else if (!(dev->accel.cmd & 0x04)) {
                                                 WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
                                             }
                                         } else {
                                             if (dev->accel.x_count >= and3) {
-                                                if ((dev->accel.cmd & 0x04) && dev->accel.sx) {
+                                                if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
                                                     WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
                                                 } else if (!(dev->accel.cmd & 0x04)) {
                                                     WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
@@ -2452,7 +2452,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                             }
                                         }
                                     } else {
-                                        if ((dev->accel.cmd & 0x04) && dev->accel.sx) {
+                                        if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
                                             WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
                                         } else if (!(dev->accel.cmd & 0x04)) {
                                             WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
