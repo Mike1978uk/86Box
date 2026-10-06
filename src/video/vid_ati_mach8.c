@@ -1977,6 +1977,11 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 scan_pitch  = mach->accel.dst_pitch;
                 scan_offset = mach->accel.dst_ge_offset;
             }
+            /*DIAGNOSTIC, not for upstream*/
+            if (dev->on && !cpu_input)
+                pclog("[M8X] scan cur=%d,%d to=%d compat=%d dpc=%04x dp_compat=%d frgd_sel=%d bkgd_sel=%d mono=%d fmix=%02x cmd_back=%d pixw=%d pitch=%d off=%d dstp=%d\n",
+                      dev->accel.cur_x, dev->accel.cur_y, mach->accel.scan_to_x, compat_scan, mach->accel.dp_config, mach->accel.dp_compat,
+                      frgd_sel, bkgd_sel, mono_src, dev->accel.frgd_mix, dev->accel.cmd_back, mach_pixel_write(mach), scan_pitch, scan_offset, mach->accel.dst_pitch);
             if (!cpu_input) {
                 mach->accel.stepx = 0;
                 mach->accel.stepy = 0;
