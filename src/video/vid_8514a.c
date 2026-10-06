@@ -1121,6 +1121,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
     uint16_t   src_dat = 0;
     uint16_t   dest_dat;
     uint16_t   old_dest_dat;
+    int        poly_x = 0;
     int        frgd_mix;
     int        bkgd_mix;
     int16_t    clip_t          = dev->accel.clip_top;
@@ -2826,6 +2827,9 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
             }
             break;
 
+        /* Graphics Ultra, measured with M8PL2: a polygon-boundary line writes the last pixel of each
+           scan line it crosses, a horizontal radial one writes nothing, and X is clamped to the left
+           scissor and rejected beyond the right one without moving the line. */
         case 5: /*Draw Polygon Boundary Line*/ {
             if (!cpu_input) {
                 dev->accel.sy = dev->accel.maj_axis_pcnt_no_limit;
@@ -2862,7 +2866,11 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
             if (dev->accel.cmd & 0x08) { /*Vectored Boundary Line*/
                 while (count-- && (dev->accel.sy >= 0)) {
-                    dev->accel.cx = CLAMP(dev->accel.cx, clip_l, clip_r);
+                    poly_x = dev->accel.cx;
+                    if (ATI_GRAPHICS_ULTRA)
+                        dev->accel.cx = MAX(dev->accel.cx, clip_l);
+                    else
+                        dev->accel.cx = CLAMP(dev->accel.cx, clip_l, clip_r);
 
                     if ((dev->accel.cx >= clip_l) &&
                         (dev->accel.cx <= clip_r) &&
@@ -2900,7 +2908,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             old_dest_dat = dest_dat;
                             MIX(mix_dat & mix_mask, dest_dat, src_dat);
                             dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                            if (dev->accel.cmd & 0x10) {
+                            if ((dev->accel.cmd & 0x10) && !(ATI_GRAPHICS_ULTRA && !(dev->accel.cmd & 0x60))) {
                                 if (dev->accel.sy && (dev->accel.cmd & 0x04)) {
                                     if (dev->accel.oldcy != dev->accel.cy) {
                                         WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx), dest_dat);
@@ -2914,6 +2922,8 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                         }
                     }
 
+                    if (ATI_GRAPHICS_ULTRA)
+                        dev->accel.cx = poly_x;
                     mix_dat <<= 1;
                     mix_dat |= 1;
                     if (dev->bpp)
@@ -2975,7 +2985,11 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                 }
             } else { /*Vectored Bresenham*/
                 while (count-- && (dev->accel.sy >= 0)) {
-                    dev->accel.cx = CLAMP(dev->accel.cx, clip_l, clip_r);
+                    poly_x = dev->accel.cx;
+                    if (ATI_GRAPHICS_ULTRA)
+                        dev->accel.cx = MAX(dev->accel.cx, clip_l);
+                    else
+                        dev->accel.cx = CLAMP(dev->accel.cx, clip_l, clip_r);
 
                     if ((dev->accel.cx >= clip_l) &&
                         (dev->accel.cx <= clip_r) &&
@@ -3013,7 +3027,10 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             MIX(mix_dat & mix_mask, dest_dat, src_dat);
                             dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
 
-                            if ((dev->accel.cmd & 0x14) == 0x14) {
+                            if (ATI_GRAPHICS_ULTRA) {
+                                if ((dev->accel.cmd & 0x10) && (dev->accel.sy ? ((dev->accel.cmd & 0x40) || (dev->accel.err_term >= 0)) : !(dev->accel.cmd & 0x04)))
+                                    WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
+                            } else if ((dev->accel.cmd & 0x14) == 0x14) {
                                 if (dev->accel.sy) {
                                     if (dev->accel.oldcy != dev->accel.cy) {
                                         WRITE((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
@@ -3023,6 +3040,8 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                         }
                     }
 
+                    if (ATI_GRAPHICS_ULTRA)
+                        dev->accel.cx = poly_x;
                     mix_dat <<= 1;
                     mix_dat |= 1;
                     if (dev->bpp)
@@ -3047,7 +3066,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                         else
                             dev->accel.cy--;
 
-                        if (dev->accel.err_term >= dev->accel.maj_axis_pcnt_no_limit) {
+                        if (ATI_GRAPHICS_ULTRA ? (dev->accel.err_term >= 0) : (dev->accel.err_term >= dev->accel.maj_axis_pcnt_no_limit)) {
                             dev->accel.err_term += dev->accel.destx_distp;
                             if (dev->accel.cmd & 0x20)
                                 dev->accel.cx++;
@@ -3062,7 +3081,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             dev->accel.cx--;
 
                         dev->accel.oldcy = dev->accel.cy;
-                        if (dev->accel.err_term >= dev->accel.maj_axis_pcnt_no_limit) {
+                        if (ATI_GRAPHICS_ULTRA ? (dev->accel.err_term >= 0) : (dev->accel.err_term >= dev->accel.maj_axis_pcnt_no_limit)) {
                             dev->accel.err_term += dev->accel.destx_distp;
                             if (dev->accel.cmd & 0x80)
                                 dev->accel.cy++;
