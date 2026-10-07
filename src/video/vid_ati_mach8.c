@@ -4341,6 +4341,11 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
         static int      seq_head;
         static int      seq_left = -1;
         uint32_t        rec = ((uint32_t) port << 16) | val;
+        static int      wlog = -1;
+        if (wlog < 0)
+            wlog = getenv("MACH8_WLOG") != NULL;
+        if (wlog)
+            pclog("M8W %04X %04X %d\n", port, val, len);
         if (seq_on < 0)
             seq_on = getenv("MACH8_SEQ") != NULL;
         if (seq_on) {
