@@ -116,6 +116,8 @@ typedef struct mach_t {
         uint16_t src_pitch;
         uint16_t dst_pitch;
         uint16_t dest_cmp_fn;
+        uint16_t src_cmp_fn;
+        uint16_t src_cmp_clr;
         uint16_t dp_config;
         uint8_t  src_reload;
         int      src_cur_x;

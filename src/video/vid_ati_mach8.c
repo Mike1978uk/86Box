@@ -1409,6 +1409,45 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     break;
                             }
 
+                            /* Graphics Ultra (M8SCMP on the real card; TEST.COM TS1 ops 133-140): 92EEh bits 3-5
+                               are a compare function in DEST_CMP_FN's encoding, applied to the source pixel
+                               against EAEEh. A true result writes the background source through the background
+                               mix. An engine reset does not clear 92EEh. */
+                            if (ATI_GRAPHICS_ULTRA && !compare && (mach->accel.src_cmp_fn & 0x38)) {
+                                uint16_t s_clr  = mach->accel.src_cmp_clr & (dev->bpp ? 0xffff : 0xff);
+                                int      s_true = 0;
+                                switch ((mach->accel.src_cmp_fn >> 3) & 7) {
+                                    case 1:
+                                        s_true = 1;
+                                        break;
+                                    case 2:
+                                        s_true = src_dat >= s_clr;
+                                        break;
+                                    case 3:
+                                        s_true = src_dat < s_clr;
+                                        break;
+                                    case 4:
+                                        s_true = src_dat != s_clr;
+                                        break;
+                                    case 5:
+                                        s_true = src_dat == s_clr;
+                                        break;
+                                    case 6:
+                                        s_true = src_dat <= s_clr;
+                                        break;
+                                    case 7:
+                                        s_true = src_dat > s_clr;
+                                        break;
+                                    default:
+                                        break;
+                                }
+                                if (s_true) {
+                                    mix = 0;
+                                    if (bkgd_sel == 0)
+                                        src_dat = bkgd_color;
+                                }
+                            }
+
                             if (!compare) {
                                 old_dest_dat = dest_dat;
                                 MIX(mix, dest_dat, src_dat);
@@ -5431,6 +5470,13 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
         case 0x92ee:
             mach_log(mach->log,"Write port 92ee, malatch=%08x.\n", svga->memaddr_latch);
+            if (ATI_GRAPHICS_ULTRA && (len == 2))
+                mach->accel.src_cmp_fn = val;
+            break;
+
+        case 0xeaee:
+            if (ATI_GRAPHICS_ULTRA && (len == 2))
+                mach->accel.src_cmp_clr = val;
             break;
 
         case 0x96ee:
