@@ -1207,7 +1207,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 return;
             }
 
-            if ((mono_src == 3) || (bkgd_sel == 3) || (frgd_sel == 3)) {
+            if ((mono_src == 3) || (bkgd_sel == 3) || (frgd_sel == 3) || (ATI_GRAPHICS_ULTRA && (frgd_sel == 7))) {
                 if (mach->accel.sx_end == mach->accel.sx_start) {
                     if (cpu_input) {
                         dev->force_busy = 0;
@@ -1361,6 +1361,15 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     else
                                         src_dat = mach->accel.color_pattern[mach->accel.color_pattern_idx];
                                     break;
+                                case 7:
+                                    /* Graphics Ultra (M8ROW6 on the real card, TS1 ops 142-143): source 7, not in
+                                       the Mach32 guide, is source 6 with the VRAM blit source in place of host
+                                       data - each source byte picks a colour pattern byte. */
+                                    if (ATI_GRAPHICS_ULTRA && !dev->bpp) {
+                                        READ(dev->accel.src + dev->accel.cx, src_dat);
+                                        src_dat = mach_src6_byte(mach, src_dat & 0xff, dev->accel.dx);
+                                    }
+                                    break;
 
                                 default:
                                     break;
@@ -1474,7 +1483,8 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 else
                     cpu_dat >>= 8;
 
-                if ((mono_src == 3) || (frgd_sel == 3) || (bkgd_sel == 3) || (mach->accel.dp_config & 0x02)) {
+                if ((mono_src == 3) || (frgd_sel == 3) || (bkgd_sel == 3) || (mach->accel.dp_config & 0x02) ||
+                    (ATI_GRAPHICS_ULTRA && (frgd_sel == 7))) {
                     dev->accel.cx += mach->accel.src_stepx;
                     mach->accel.sx++;
                     if (mach->accel.sx >= src_row_width) {
