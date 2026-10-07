@@ -6898,12 +6898,31 @@ mach_accel_outb(uint16_t port, uint8_t val, void *priv)
     mach_log(mach->log, "%04X:%08X: OUTB port=%04x, val=%02x, fifo idx=%d.\n", CS, cpu_state.pc, port, val, dev->fifo_idx);
 }
 
+/* DIAGNOSTIC, not for upstream: MACH8_SPLIT8=1 on an 8-bit bus card turns every 16- and
+   32-bit access into byte cycles, low byte first, as an 8-bit ISA slot delivers them. */
+static int
+mach_split8(mach_t *mach)
+{
+    static int on = -1;
+    if (on < 0) {
+        on = getenv("MACH8_SPLIT8") != NULL;
+        pclog("MACH8_SPLIT8=%d bus_width=%d\n", on, mach->bus_width_8bit);
+    }
+    return on && (mach->bus_width_8bit == 8);
+}
+
 static void
 mach_accel_outw(uint16_t port, uint16_t val, void *priv)
 {
     mach_t *mach = (mach_t *) priv;
     svga_t *svga = &mach->svga;
     ibm8514_t *dev = (ibm8514_t *) svga->dev8514;
+
+    if (mach_split8(mach)) {
+        mach_accel_outb(port, val & 0xff, priv);
+        mach_accel_outb(port + 1, val >> 8, priv);
+        return;
+    }
 
     if (port == 0xf6ee)
         port = 0x82e8;
@@ -6975,6 +6994,12 @@ mach_accel_outl(uint16_t port, uint32_t val, void *priv)
     mach_t *mach = (mach_t *) priv;
     svga_t *svga = &mach->svga;
     ibm8514_t *dev = (ibm8514_t *) svga->dev8514;
+
+    if (mach_split8(mach)) {
+        mach_accel_outw(port, val & 0xffff, priv);
+        mach_accel_outw(port + 2, val >> 16, priv);
+        return;
+    }
 
     if (port == 0xf6ee)
         port = 0x82e8;
@@ -7079,6 +7104,11 @@ mach_accel_inw(uint16_t port, void *priv)
     svga_t *svga = &mach->svga;
     uint16_t temp;
 
+    if (mach_split8(mach)) {
+        temp = mach_accel_inb(port, priv);
+        return temp | (mach_accel_inb(port + 1, priv) << 8);
+    }
+
     if (port & 0x8000)
         temp = mach_accel_in_fifo(mach, svga, (ibm8514_t *) svga->dev8514, port, 2);
     else
@@ -7101,6 +7131,11 @@ mach_accel_inl(uint16_t port, void *priv)
     mach_t *mach = (mach_t *) priv;
     svga_t *svga = &mach->svga;
     uint32_t temp;
+
+    if (mach_split8(mach)) {
+        temp = mach_accel_inw(port, priv);
+        return temp | ((uint32_t) mach_accel_inw(port + 2, priv) << 16);
+    }
 
     if (port & 0x8000)
         temp = mach_accel_in_fifo(mach, svga, (ibm8514_t *) svga->dev8514, port, 2);
