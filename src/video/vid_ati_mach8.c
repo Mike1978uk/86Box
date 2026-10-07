@@ -4235,6 +4235,37 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
     int mono_src;
     int ret = 0x00;
 
+    /* DIAGNOSTIC, not for upstream: with MACH8_SEQ=1, log every accelerator write around the
+       first command-3 operations (the 64 writes before the first one, then the next 6000), so
+       a guest driver's exact sequence can be replayed on the real card. */
+    {
+        static int      seq_on = -1;
+        static uint32_t seq_ring[64];
+        static int      seq_head;
+        static int      seq_left = -1;
+        uint32_t        rec = ((uint32_t) port << 16) | val;
+        if (seq_on < 0)
+            seq_on = getenv("MACH8_SEQ") != NULL;
+        if (seq_on) {
+            if ((seq_left < 0) && (port == 0x9ae8) && (len == 2) && ((val >> 13) == 3)) {
+                for (int i = 0; i < 64; i++) {
+                    uint32_t r = seq_ring[(seq_head + i) & 63];
+                    if (r)
+                        pclog("M8SEQ pre %04X %04X\n", r >> 16, r & 0xffff);
+                }
+                seq_left = 6000;
+            }
+            if (seq_left > 0) {
+                pclog("M8SEQ %04X %04X %d\n", port, val, len);
+                if (--seq_left == 0)
+                    pclog("M8SEQ end\n");
+            } else if (seq_left < 0) {
+                seq_ring[seq_head] = rec;
+                seq_head           = (seq_head + 1) & 63;
+            }
+        }
+    }
+
     if (m8u_enabled()) {
         m8u_port[port] += len;
         switch (port) {
