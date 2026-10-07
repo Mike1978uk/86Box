@@ -4713,6 +4713,10 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 dev->force_busy = 0;
                 dev->force_busy2 = 0;
                 mach->accel.line_idx = 0;
+                /* Graphics Ultra (measured on the real card): the engine reset clears PATT_INDEX;
+                   LINEDRAW_OPT and PATT_DATA_INDEX keep their values. */
+                if (ATI_GRAPHICS_ULTRA)
+                    mach->accel.patt_idx = 0;
             }
             break;
 
