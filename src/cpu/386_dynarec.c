@@ -1428,6 +1428,50 @@ exec386(int32_t cycs)
                               diag10_pcs, diag10_ppc, (int) (cr0 & 1));
                 }
             }
+            /* DIAGNOSTIC, not for upstream: INBOARD_RINGAT=SSSS:OOOO[,AAAA] dumps the last 512
+               instructions (CS:EIP, AX, SP) the first time CS:EIP reaches that address,
+               counting only hits after code has run in segment AAAA, if given. */
+            {
+                static int      ra_on = -1;
+                static uint16_t ra_cs;
+                static uint32_t ra_pc;
+                static uint32_t ra_ring[512][3];
+                static int      ra_head;
+                static int      ra_after = -1;
+                if (ra_on < 0) {
+                    const char  *e = getenv("INBOARD_RINGAT");
+                    unsigned int s, o, a;
+                    ra_on = (e && (sscanf(e, "%x:%x", &s, &o) == 2)) ? 1 : 0;
+                    if (e && (sscanf(e, "%x:%x,%x", &s, &o, &a) == 3))
+                        ra_after = a;
+                    if (ra_on) {
+                        ra_cs = s;
+                        ra_pc = o;
+                        pclog("RINGAT armed for %04X:%04X\n", ra_cs, ra_pc);
+                    }
+                }
+                if (ra_on == 1) {
+                    ra_ring[ra_head][0] = ((uint32_t) CS << 16) | (cpu_state.pc & 0xffff);
+                    ra_ring[ra_head][1] = EAX;
+                    ra_ring[ra_head][2] = ESP;
+                    ra_head = (ra_head + 1) & 511;
+                    if ((ra_after >= 0) && (CS == ra_after))
+                        ra_after = -2;
+                    if ((CS == ra_cs) && (cpu_state.pc == ra_pc) && (ra_after < 0)) {
+                        ra_on = 2;
+                        for (int i = 0; i < 512; i++) {
+                            uint32_t *r = ra_ring[(ra_head + i) & 511];
+                            uint32_t  lin = ((r[0] >> 16) << 4) + (r[0] & 0xffff);
+                            int       sav = cpu_state.abrt;
+                            pclog("RINGAT %04X:%04X eax=%08X esp=%08X | %02X %02X %02X %02X %02X %02X | w %04X %04X l %08X\n",
+                                  r[0] >> 16, r[0] & 0xffff, r[1], r[2], readmembl(lin), readmembl(lin + 1),
+                                  readmembl(lin + 2), readmembl(lin + 3), readmembl(lin + 4), readmembl(lin + 5),
+                                  readmemwl(lin), readmemwl(lin + 2), readmemll(lin));
+                            cpu_state.abrt = sav;
+                        }
+                    }
+                }
+            }
             {
                 extern uint16_t diag10_pcs;
                 extern uint32_t diag10_ppc;
