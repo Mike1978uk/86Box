@@ -339,6 +339,37 @@ ibm8514_accel_out_pixtrans(svga_t *svga, UNUSED(uint16_t port), uint32_t val, in
             return;
         }
 
+        /* Graphics Ultra (M8LINE, M8MONO on the real card): in planar mode (CMD bit 1 set) a 16-bit
+           rectangle takes one byte per aligned group of four pixels, bits 4 to 1, starting at bit
+           4 - (X mod 4). A row ending inside a group drops the rest of that byte. */
+        if (ATI_GRAPHICS_ULTRA && (len == 2) && (pixcntl == 2) && (frgd_mix != 2) && (bkgd_mix != 2) &&
+            (dev->accel.cmd & 0x02) && (dev->accel.cmd & 0x200) && (cmd == 2) && !(dev->accel.cmd & 0x08)) {
+            uint8_t  bytes[2];
+            uint16_t saved_cmd = dev->accel.cmd;
+
+            if (dev->accel.cmd & 0x1000) {
+                bytes[0] = val & 0xff;
+                bytes[1] = (val >> 8) & 0xff;
+            } else {
+                bytes[0] = (val >> 8) & 0xff;
+                bytes[1] = val & 0xff;
+            }
+            dev->accel.cmd &= ~0x02; /*one pixel per call*/
+            for (int i = 0; (i < 2) && !dev->accel.cmd_back; i++) {
+                do {
+                    int cy  = dev->accel.cy;
+                    int bit = (bytes[i] >> (4 - (dev->accel.cx & 3))) & 1;
+                    int end = ((dev->accel.cx & 3) == 3);
+
+                    ibm8514_accel_start(8, 1, bit ? 0xffffffff : 0x00000000, 0, svga, len);
+                    if (end || (dev->accel.cy != cy))
+                        break;
+                } while (!dev->accel.cmd_back);
+            }
+            dev->accel.cmd = saved_cmd;
+            return;
+        }
+
         if (len == 2) {
             /*Bus size*/
             if (dev->accel.cmd & 0x200) /*16-bit*/
@@ -2341,7 +2372,9 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                     if (dev->accel.cmd & 0x02) {
                         if (!(dev->accel.cmd & 0x1000)) {
                             if (!(dev->accel.cmd & 0x08)) {
-                                if (and3) {
+                                /* Graphics Ultra: ibm8514_accel_out_pixtrans places 16-bit planar data itself. */
+                                if (and3 && !(ATI_GRAPHICS_ULTRA && (cmd == 2) && (dev->accel.cmd & 0x200) && (pixcntl == 2) &&
+                                              (frgd_mix != 2) && (bkgd_mix != 2))) {
                                     if (dev->accel.cmd & 0x20)
                                         dev->accel.cx -= and3;
                                     else
