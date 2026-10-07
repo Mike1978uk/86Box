@@ -562,6 +562,9 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
             }
 
             if (mach->accel.linedraw_opt & 0x08) { /*Vector Line*/
+                int poly_line   = ATI_GRAPHICS_ULTRA && (mach->accel.linedraw_opt & 0x02);
+                int poly_line_x = 0;
+
                 while (count--) {
                     switch (mono_src) {
                         case 0:
@@ -601,6 +604,13 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             break;
                     }
 
+                    /* Graphics Ultra (M8ROW7 on the real card, before TS1 op 149; as M8PL2 for the 8514/A path): a
+                       POLY_MODE line draws boundary pixels, X clamped to the left scissor without moving the
+                       line and rejected beyond the right one. */
+                    poly_line_x = dev->accel.dx;
+                    if (poly_line && (dev->accel.dx < clip_l))
+                        dev->accel.dx = clip_l;
+
                     if ((dev->accel.dx >= clip_l) &&
                         (dev->accel.dx <= clip_r) &&
                         (dev->accel.dy >= clip_t) &&
@@ -633,14 +643,14 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     break;
                             }
 
-                            if (mach->accel.linedraw_opt & 0x02) {
+                            if ((mach->accel.linedraw_opt & 0x02) && !poly_line) {
                                 READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + dev->accel.cx, poly_src);
                                 poly_src = ((poly_src & rd_mask) == rd_mask);
                                 if (poly_src)
                                     mach->accel.poly_fill = !mach->accel.poly_fill;
                             }
 
-                            if (mach->accel.poly_fill || !(mach->accel.linedraw_opt & 0x02)) {
+                            if (poly_line || mach->accel.poly_fill || !(mach->accel.linedraw_opt & 0x02)) {
                                 READ(mach->accel.dst_ge_offset + (dev->accel.dy * mach->accel.dst_pitch) + dev->accel.dx, dest_dat);
 
                                 switch (compare_mode) {
@@ -695,6 +705,8 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         }
                     }
 
+                    if (poly_line)
+                        dev->accel.dx = poly_line_x;
                     if ((mono_src == 1) && !count) {
                         if (cpu_input) {
                             mach->force_busy  = 0;
