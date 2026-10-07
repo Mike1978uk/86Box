@@ -9164,11 +9164,15 @@ mach8_init(const device_t *info)
 
         video_inform(VIDEO_FLAG_TYPE_8514, &timing_gfxultra_isa);
         mach->bus_width_8bit = device_get_config_int("bus_width");
-        mach->config1 = 0x01 | 0x08 | 0x80;
+        /* On the Graphics Ultra the boot ROM and EEPROM hang off the VGA chip, so the mach8's
+           own straps report EEPROM_ENA and ROM_ENA clear. CONFIG_STATUS_2: HIRES_BOOT and
+           EPROM_16_ENA set, WRITE_PER_BIT and FLASH_ENA clear; bit 6 is reserved and reads set.
+           Values read from a 113-11504-002 card, 1 MB VRAM, in an 8-bit slot. */
+        mach->config1 = 0x01;
         if (dev->vram_amount == 1024)
             mach->config1 |= 0x20;
 
-        mach->config2 = 0x02 | 0x08 | 0x10;
+        mach->config2 = 0x02 | 0x04 | 0x40;
         svga->clock_gen = device_add(&ati18811_1_mach32_device);
         if (mach->bus_width_8bit == 16)
             mach->config1 |= 0x02;
