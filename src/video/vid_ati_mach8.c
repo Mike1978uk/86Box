@@ -417,6 +417,28 @@ mach_src6_byte(mach_t *mach, uint8_t byte, int x)
     return mach->accel.color_pattern[((byte & 7) << 2) | (x & 1)];
 }
 
+/* Graphics Ultra (M8SRC4C-E and TS1 ops 145-148 on the real card): DP_CONFIG foreground source 4,
+   not in the Mach32 guide, gives destination pixel k of a row 11h times the number of source
+   pixels 4k to 4k+3 whose read-mask bits are all set. Past the source row, k beyond a quarter of
+   its width, each of the four reads as (k mod 16) x 11h. */
+static uint8_t
+mach_src4_count(ibm8514_t *dev, uint32_t row, int k, int src_width, uint8_t rd_mask)
+{
+    int n = 0;
+
+    for (int j = 0; j < 4; j++) {
+        uint8_t px;
+
+        if (k < (src_width >> 2))
+            px = dev->vram[(row + (k << 2) + j) & dev->vram_mask];
+        else
+            px = (k & 0x0f) * 0x11;
+        n += ((px & rd_mask) == rd_mask);
+    }
+
+    return n * 0x11;
+}
+
 static int
 mach_frgd_sel(mach_t *mach, ibm8514_t *dev)
 {
@@ -1219,7 +1241,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 return;
             }
 
-            if ((mono_src == 3) || (bkgd_sel == 3) || (frgd_sel == 3) || (ATI_GRAPHICS_ULTRA && (frgd_sel == 7))) {
+            if ((mono_src == 3) || (bkgd_sel == 3) || (frgd_sel == 3) || (ATI_GRAPHICS_ULTRA && ((frgd_sel == 4) || (frgd_sel == 7)))) {
                 if (mach->accel.sx_end == mach->accel.sx_start) {
                     if (cpu_input) {
                         dev->force_busy = 0;
@@ -1357,6 +1379,10 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         }
 
                         if (mach->accel.poly_fill || !(mach->accel.dp_config & 0x02)) {
+                            /* Graphics Ultra (M8SRC4C on the real card): source 4 is always the foreground; the
+                               monochrome source does not pick per pixel. */
+                            if (ATI_GRAPHICS_ULTRA && (frgd_sel == 4) && !dev->bpp)
+                                mix = 1;
                             switch (mix ? frgd_sel : bkgd_sel) {
                                 case 0:
                                     src_dat = bkgd_color;
@@ -1377,6 +1403,11 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         src_dat = mach->accel.color_pattern_hicol[mach->accel.color_pattern_idx];
                                     else
                                         src_dat = mach->accel.color_pattern[mach->accel.color_pattern_idx];
+                                    break;
+                                case 4:
+                                    if (ATI_GRAPHICS_ULTRA && !dev->bpp)
+                                        src_dat = mach_src4_count(dev, dev->accel.src + dev->accel.cx - (mach->accel.sx * mach->accel.src_stepx),
+                                                                  dev->accel.sx, src_row_width, rd_mask);
                                     break;
                                 case 7:
                                     /* Graphics Ultra (M8ROW6 on the real card, TS1 ops 142-143): source 7, not in
@@ -1501,7 +1532,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                     cpu_dat >>= 8;
 
                 if ((mono_src == 3) || (frgd_sel == 3) || (bkgd_sel == 3) || (mach->accel.dp_config & 0x02) ||
-                    (ATI_GRAPHICS_ULTRA && (frgd_sel == 7))) {
+                    (ATI_GRAPHICS_ULTRA && ((frgd_sel == 4) || (frgd_sel == 7)))) {
                     dev->accel.cx += mach->accel.src_stepx;
                     mach->accel.sx++;
                     if (mach->accel.sx >= src_row_width) {
