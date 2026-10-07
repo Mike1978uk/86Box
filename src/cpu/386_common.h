@@ -322,6 +322,32 @@
         return 1;                                     \
     }
 
+/* getpccache() returns NULL for a page with no exec pointer, such as video memory.
+   Code there is fetched through the mapping's read handlers, uncached, as the CPU
+   would fetch it over the bus. */
+static uint32_t fetch_ff = 0xffffffff;
+
+static __inline uint8_t
+fetch_nocache_b(uint32_t a)
+{
+    uint8_t ret = readmembl(a);
+    return cpu_state.abrt ? 0 : ret;
+}
+
+static __inline uint16_t
+fetch_nocache_w(uint32_t a)
+{
+    uint16_t ret = readmemwl(a);
+    return cpu_state.abrt ? 0 : ret;
+}
+
+static __inline uint32_t
+fetch_nocache_l(uint32_t a)
+{
+    uint32_t ret = readmemll(a);
+    return cpu_state.abrt ? 0 : ret;
+}
+
 #ifdef OPS_286_386
 /* TODO: Introduce functions to read exec. */
 static __inline uint8_t
@@ -377,6 +403,8 @@ fastreadb(uint32_t a)
     t = getpccache(a);
     if (cpu_state.abrt)
         return 0;
+    if (t == NULL)
+        return fetch_nocache_b(a);
     pccache  = a >> 12;
     pccache2 = t;
 
@@ -405,6 +433,8 @@ fastreadw(uint32_t a)
     t = getpccache(a);
     if (cpu_state.abrt)
         return 0;
+    if (t == NULL)
+        return fetch_nocache_w(a);
 
     pccache  = a >> 12;
     pccache2 = t;
@@ -430,6 +460,8 @@ fastreadl(uint32_t a)
             t = getpccache(a);
             if (cpu_state.abrt)
                 return 0;
+            if (t == NULL)
+                return fetch_nocache_l(a);
             pccache2 = t;
             pccache  = a >> 12;
         }
@@ -449,6 +481,8 @@ get_ram_ptr(uint32_t a)
         return (void *) (((uintptr_t) &pccache2[a] & 0x00000000ffffffffULL) | ((uintptr_t) &pccache2[0] & 0xffffffff00000000ULL));
     else {
         uint8_t *t = getpccache(a);
+        if (t == NULL)
+            return (void *) &fetch_ff;
         return (void *) (((uintptr_t) &t[a] & 0x00000000ffffffffULL) | ((uintptr_t) &t[0] & 0xffffffff00000000ULL));
     }
 }
@@ -523,6 +557,8 @@ fastreadw_fetch(uint32_t a)
     t = getpccache(a);
     if (cpu_state.abrt)
         return 0;
+    if (t == NULL)
+        return fetch_nocache_w(a);
 
     pccache  = a >> 12;
     pccache2 = t;
@@ -549,6 +585,8 @@ fastreadl_fetch(uint32_t a)
             t = getpccache(a);
             if (cpu_state.abrt)
                 return 0;
+            if (t == NULL)
+                return fetch_nocache_l(a);
             pccache2 = t;
             pccache  = a >> 12;
         }
