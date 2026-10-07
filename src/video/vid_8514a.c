@@ -2544,7 +2544,11 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             if (dev->accel.output2)
                                 dev->accel.sx += and3;
 
-                            if (dev->accel.cmd & 0x20)
+                            /* Graphics Ultra (M8LINE on the real card): direction 0 draws rows in +X and steps up. */
+                            if (ATI_GRAPHICS_ULTRA && !(dev->accel.cmd & 0xe0)) {
+                                dev->accel.cx -= (dev->accel.sx + 1);
+                                dev->accel.cy--;
+                            } else if (dev->accel.cmd & 0x20)
                                 dev->accel.cx -= (dev->accel.sx + 1);
                             else
                                 dev->accel.cx += (dev->accel.sx + 1);
