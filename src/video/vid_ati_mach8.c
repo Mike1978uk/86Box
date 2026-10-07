@@ -1307,7 +1307,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             mix = mix_dat >> 0x1f;
                             mix_dat <<= 1;
                         } else {
-                            if (mach->accel.dp_config & 0x200) {
+                            if (ATI_GRAPHICS_ULTRA && (mach->accel.dp_config & 0x200)) {
+                                /* Graphics Ultra (M8ROW6 on the real card, TS1 op 144): 16-bit monochrome
+                                   host data with LSB_FIRST clear is taken from bit 15 down. */
+                                mix = (mix_dat >> 15) & 0x01;
+                                mix_dat <<= 1;
+                            } else if (mach->accel.dp_config & 0x200) {
                                 mix = mix_dat & 0x01;
                                 mix_dat >>= 1;
                             } else {
