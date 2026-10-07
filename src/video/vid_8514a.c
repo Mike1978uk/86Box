@@ -314,6 +314,31 @@ ibm8514_accel_out_pixtrans(svga_t *svga, UNUSED(uint16_t port), uint32_t val, in
     int        cmd       = dev->accel.cmd >> 13;
 
     if (!dev->accel.cmd_back) {
+        /* Graphics Ultra (M8LINE on the real card): monochrome host data in pixel mode (CMD bit 1
+           clear) takes one byte per pixel and only bit 4 - (X mod 4) of it. 16-bit transfers give
+           two bytes, low first when LSB_FIRST (bit 12) is set; 8-bit transfers use the low byte. */
+        if (ATI_GRAPHICS_ULTRA && (len == 2) && (pixcntl == 2) && (frgd_mix != 2) && (bkgd_mix != 2) &&
+            !(dev->accel.cmd & 0x02) && ((cmd == 1) || (cmd == 2))) {
+            uint8_t bytes[2];
+            int     nbytes = 1;
+
+            bytes[0] = val & 0xff;
+            if (dev->accel.cmd & 0x200) {
+                nbytes = 2;
+                if (dev->accel.cmd & 0x1000)
+                    bytes[1] = (val >> 8) & 0xff;
+                else {
+                    bytes[1] = bytes[0];
+                    bytes[0] = (val >> 8) & 0xff;
+                }
+            }
+            for (int i = 0; (i < nbytes) && !dev->accel.cmd_back; i++) {
+                int bit = (bytes[i] >> (4 - (dev->accel.cx & 3))) & 1;
+                ibm8514_accel_start(8, 1, bit ? 0xffffffff : 0x00000000, 0, svga, len);
+            }
+            return;
+        }
+
         if (len == 2) {
             /*Bus size*/
             if (dev->accel.cmd & 0x200) /*16-bit*/
