@@ -79,6 +79,9 @@ typedef struct mach_t {
     uint8_t  bank_r;
     uint16_t shadow_set;
     uint16_t shadow_cntl;
+    uint8_t  crt_sets[3][8][2]; /* Graphics Ultra CRT sets: primary, 640, 1024; 02E8h-1EE8h, low/high */
+    uint8_t  crt_valid[3][8];
+    int      crt_replay;
     uint8_t overscan_col_8;
     uint8_t overscan_b_col_24;
     uint8_t overscan_g_col_24;
