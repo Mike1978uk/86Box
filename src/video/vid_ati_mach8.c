@@ -6112,6 +6112,18 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                                 temp |= (mach->accel.dp_config & 0x1000) ? (1 << i) : (0x8000 >> i);
                             mach_accel_start(mach->accel.cmd_type, 1, 1, -1, 0, svga, mach, dev);
                         }
+                    } else if (ATI_GRAPHICS_ULTRA && !dev->bpp && (mach->accel.cmd_type == 2) && (mach->accel.dp_config & 0x200) &&
+                               (mach_frgd_sel(mach, dev) != 3)) {
+                        /* Colour read, 16-bit data: two pixels per word taken along the trajectory, so a
+                           row of odd width runs on into the next row; the first pixel is in D15:8 unless
+                           LSB_FIRST is set (guide, DP_CONFIG), and a word past the end is padded with 0.
+                           TS2 sub-test 24 on the real card. */
+                        temp = 0;
+                        for (int i = 0; (i < 2) && !dev->accel.cmd_back; i++) {
+                            uint8_t px = dev->vram[(dev->accel.dest + dev->accel.dx) & dev->vram_mask];
+                            temp |= px << (((mach->accel.dp_config & 0x1000) ? i : (1 - i)) * 8);
+                            mach_accel_start(mach->accel.cmd_type, 1, 1, -1, 0, svga, mach, dev);
+                        }
                     } else {
                         if ((mach->accel.cmd_type == 3) || (mach->accel.cmd_type == 4)) {
                             READ_PIXTRANS_WORD(dev->accel.cx, 0)
