@@ -6388,8 +6388,8 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
             break;
 
         case 0xd6ee:
-            if (len == 2)
-                temp = mach->accel.patt_idx;
+            if (len == 2) /*the Graphics Ultra returns the index as drawing left it (TS2 sub-tests 26-31)*/
+                temp = ATI_GRAPHICS_ULTRA ? mach->accel.color_pattern_idx : mach->accel.patt_idx;
             break;
 
         case 0x86ee:
