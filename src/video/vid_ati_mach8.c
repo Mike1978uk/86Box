@@ -6079,6 +6079,20 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                     if (len == 1) {
                         READ_PIXTRANS_BYTE_IO(dev->accel.dx, 1)
                         temp = mach->accel.pix_trans[1];
+                    } else if (ATI_GRAPHICS_ULTRA && !dev->bpp && (mach->accel.cmd_type == 2) && (mach->accel.dp_config & 0x04)) {
+                        /* Monochrome read (DP_CONFIG READ_MODE): 16 pixels per word, packed as the
+                           monochrome write takes them - from bit 15 down unless LSB_FIRST is set. A pixel
+                           is 1 when (P | ~RD_MASK) == FFh, RD_MASK unrotated in ATI operations (ATI guide,
+                           RD_MASK note 3 and PIX_TRANS note 2). TS2 sub-test 14 reads back what it wrote. */
+                        uint8_t rdm = dev->accel.rd_mask & 0xff;
+
+                        temp = 0;
+                        for (int i = 0; (i < 16) && !dev->accel.cmd_back; i++) {
+                            uint8_t px = dev->vram[(dev->accel.dest + dev->accel.dx) & dev->vram_mask];
+                            if (((px | ~rdm) & 0xff) == 0xff)
+                                temp |= (mach->accel.dp_config & 0x1000) ? (1 << i) : (0x8000 >> i);
+                            mach_accel_start(mach->accel.cmd_type, 1, 1, -1, 0, svga, mach, dev);
+                        }
                     } else {
                         if ((mach->accel.cmd_type == 3) || (mach->accel.cmd_type == 4)) {
                             READ_PIXTRANS_WORD(dev->accel.cx, 0)
