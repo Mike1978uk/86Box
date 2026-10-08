@@ -4876,6 +4876,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 dev->ext_pitch = 1024;
                 dev->ext_crt_pitch = 128;
                 mach->accel.compat_pitch = 1;
+                dev->accel.x_wrap = ATI_GRAPHICS_ULTRA;
                 mach_set_resolution(mach, svga);
             }
             break;
@@ -5134,6 +5135,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                         dev->ext_pitch = 1024;
                         dev->ext_crt_pitch = 128;
                         mach->accel.compat_pitch = 1;
+                        dev->accel.x_wrap = ATI_GRAPHICS_ULTRA;
                         svga_recalctimings(svga);
                     }
                 }
@@ -5521,6 +5523,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             }
             dev->ext_pitch = ((mach->accel.ge_pitch & 0xff) << 3);
             mach->accel.compat_pitch = 0;
+            dev->accel.x_wrap = 0;
             /* Graphics Ultra (M8EXP on the real card): GE_PITCH applies to the extended drawing
                path at once, without a mode set. */
             if (ATI_GRAPHICS_ULTRA) {
@@ -9551,6 +9554,7 @@ mach8_init(const device_t *info)
     dev->pitch = 1024;
     dev->ext_pitch = 1024;
     mach->accel.compat_pitch = 1;
+    dev->accel.x_wrap = ATI_GRAPHICS_ULTRA;
     dev->ext_crt_pitch = 0x80;
     dev->accel_bpp = 8;
     svga->force_old_addr = 1;
@@ -9620,6 +9624,7 @@ ati8514_init(svga_t *svga, void *ext8514, void *dev8514)
     dev->pitch = 1024;
     dev->ext_pitch = 1024;
     mach->accel.compat_pitch = 1;
+    dev->accel.x_wrap = ATI_GRAPHICS_ULTRA;
     dev->ext_crt_pitch = 0x80;
     dev->accel_bpp = 8;
     dev->rowoffset = 0x80;

@@ -1197,6 +1197,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
     uint16_t   dest_dat;
     uint16_t   old_dest_dat;
     int        poly_x = 0;
+    int        x_mask = 0x7ff;
     int        frgd_mix;
     int        bkgd_mix;
     int16_t    clip_t          = dev->accel.clip_top;
@@ -1636,6 +1637,8 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
         /* On the Graphics Ultra a Bresenham line steps diagonally while the error term is not
            negative (M8SEQ); the comparison with MAJ_AXIS_PCNT is kept for the other chips. */
         case 1: /*Draw line*/
+            /*At the Graphics Ultra's 8514/A-compatible pitch X wraps modulo 1024 (ATI guide pp. 8-21, 8-22).*/
+            x_mask = dev->accel.x_wrap ? 0x3ff : 0x7ff;
             if (dev->on && !cpu_input) M8TRACE("[M8L] start cmd=%04x cur=%d,%d maj=%d\n", dev->accel.cmd, dev->accel.cur_x, dev->accel.cur_y, dev->accel.maj_axis_pcnt); /*DIAGNOSTIC*/
             if (!cpu_input) {
                 dev->accel.x_count = 0;
@@ -1848,7 +1851,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     break;
                             }
 
-                            READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                            READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
 
                             if ((compare_mode == 0) ||
                                 ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -1864,24 +1867,24 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     if (!(dev->accel.cmd & 0x1000)) {
                                         if (dev->accel.x_count >= and3) {
                                             if ((dev->accel.cmd & 0x04) && dev->accel.sy) {
-                                                WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                                                WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
                                             } else if (!(dev->accel.cmd & 0x04)) {
-                                                WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                                                WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
                                             }
                                         }
                                     } else {
                                         if ((dev->accel.cmd & 0x04) && dev->accel.sy) {
-                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
                                         } else if (!(dev->accel.cmd & 0x04)) {
-                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
                                         }
                                     }
                                 } else {
                                     if (ibm8514_cpu_src(svga) || !cpu_input) {
                                         if ((dev->accel.cmd & 0x04) && dev->accel.sy) {
-                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
                                         } else if (!(dev->accel.cmd & 0x04)) {
-                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                                            WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
                                         }
                                     }
                                 }
@@ -1979,7 +1982,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             (dev->accel.cy <= clip_b)) {
                             dev->subsys_stat |= INT_GE_BSY;
                             if (ibm8514_cpu_dest(svga)) {
-                                READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), src_dat);
+                                READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), src_dat);
                             } else
                                 switch ((mix_dat & 0x01) ? frgd_mix : bkgd_mix) {
                                     case 0:
@@ -1999,7 +2002,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         break;
                                 }
 
-                            READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                            READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
 
                             if ((compare_mode == 0) ||
                                 ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -2012,9 +2015,9 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 MIX(mix_dat & 0x01, dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                                 if ((dev->accel.cmd & 0x04) && dev->accel.sy) {
-                                    WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                                    WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
                                 } else if (!(dev->accel.cmd & 0x04)) {
-                                    WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                                    WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
                                 }
                             }
                         }
@@ -2095,7 +2098,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         break;
                                 }
 
-                                READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                                READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
 
                                 if ((compare_mode == 0) ||
                                     ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -2107,7 +2110,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                    WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
+                                    WRITE((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
                                 }
                             }
                         }
