@@ -5971,7 +5971,8 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                 }
 
                 if (dev->data_available) {
-                    temp |= 0x0100; /*Read Data available*/
+                    /* The flag drops with the last word the host takes, so the completion
+                       check comes before the bit is reported. */
                     if (mach->accel.cmd_type >= 0) {
                         switch (mach->accel.cmd_type) {
                             case 2:
@@ -6002,6 +6003,8 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                                 break;
                         }
                     }
+                    if (dev->data_available)
+                        temp |= 0x0100; /*Read Data available*/
                 }
             }
             mach_log(mach->log, "[%04X:%08X]: 9AE8: Temp = %04x, len = %d\n\n", CS, cpu_state.pc, temp, len);
@@ -6017,7 +6020,6 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                 dev->force_busy2 = 0;
 
                 if (dev->data_available2) {
-                    temp |= 0x01; /*Read Data available*/
                     if (mach->accel.cmd_type >= 0) {
                         switch (mach->accel.cmd_type) {
                             case 2:
@@ -6048,6 +6050,8 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                                 break;
                         }
                     }
+                    if (dev->data_available2)
+                        temp |= 0x01; /*Read Data available*/
                 }
             }
             mach_log(mach->log, "[%04X:%08X]: 9AE9: Temp = %04x, len = %d\n\n", CS, cpu_state.pc, temp, len);
