@@ -5597,15 +5597,11 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             mach_log(mach->log,"Line OPT=%04x.\n", val);
             if (len == 2) {
                 mach->accel.linedraw_opt = val;
-                mach->accel.bbottom = dev->accel.clip_bottom;
-                mach->accel.btop = dev->accel.clip_top;
-                mach->accel.bleft = dev->accel.clip_left;
-                mach->accel.bright = dev->accel.clip_right;
-                if (mach->accel.linedraw_opt & 0x100) {
-                    mach->accel.bbottom = 2047;
-                    mach->accel.btop = 0;
-                    mach->accel.bleft = 0;
-                    mach->accel.bright = 2047;
+                if (mach->accel.linedraw_opt & 0x100) { /*BOUNDS_RESET to an empty box (guide p. 9-23)*/
+                    mach->accel.bbottom = -2048;
+                    mach->accel.btop    = 2047;
+                    mach->accel.bleft   = 2047;
+                    mach->accel.bright  = -2048;
                 }
             }
             break;
@@ -5856,6 +5852,24 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 dev->accel.cur_y                             = mach->accel.line_array[(mach->accel.line_idx == 5) ? 5 : 1];
                 mach->accel.cx_end_line                      = mach->accel.line_array[2];
                 mach->accel.cy_end_line                      = mach->accel.line_array[3];
+                if (mach->accel.line_idx & 1) {
+                    /* Every point written grows the bounds accumulator (guide p. 9-48). A coordinate
+                       outside the device range (-512..1535) counts as 2047 above it, -2048 below it
+                       (TS2 sub-tests 17-23 on the real card). */
+                    int16_t px = (int16_t) mach->accel.line_array[mach->accel.line_idx - 1];
+                    int16_t py = (int16_t) mach->accel.line_array[mach->accel.line_idx];
+
+                    px = (px > 1535) ? 2047 : ((px < -512) ? -2048 : px);
+                    py = (py > 1535) ? 2047 : ((py < -512) ? -2048 : py);
+                    if (px < mach->accel.bleft)
+                        mach->accel.bleft = px;
+                    if (px > mach->accel.bright)
+                        mach->accel.bright = px;
+                    if (py < mach->accel.btop)
+                        mach->accel.btop = py;
+                    if (py > mach->accel.bbottom)
+                        mach->accel.bbottom = py;
+                }
                 if (mach->accel.line_idx == 5) {
                     /*Index 5 sets the current Y and returns to index 4: a move, not a draw.*/
                     dev->accel.cur_x        = mach->accel.line_array[4] & 0x7ff;
