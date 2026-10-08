@@ -32,6 +32,7 @@
 #include <86box/mem.h>
 #include "cpu.h"
 #include <86box/timer.h>
+#include <86box/machine.h>
 #include <86box/mca.h>
 #include <86box/pci.h>
 #include <86box/rom.h>
@@ -6865,12 +6866,31 @@ m8t(const char *dir, uint16_t port, uint16_t val, int len)
     }
 }
 
+/* With JU1 set for an 8-bit slot the card only sees byte cycles, low byte first. On the command
+   FIFO side (ports 8000h and up) one latch shared by all ports holds a low byte until a high byte
+   commits the word, so a split word acts as one 16-bit access and a lone low byte does nothing.
+   Reading the high byte of pixel transfer pops the word; reading the low byte does not. Ports
+   below 8000h take each byte as it arrives. */
+static int
+mach_byte_bus(mach_t *mach)
+{
+    return mach->bus_width_8bit == 8;
+}
+
 static void
 mach_accel_outb(uint16_t port, uint8_t val, void *priv)
 {
     mach_t *mach = (mach_t *) priv;
     svga_t *svga = &mach->svga;
     ibm8514_t *dev = (ibm8514_t *) svga->dev8514;
+
+    if (mach_byte_bus(mach) && (port & 0x8000)) {
+        if (port & 1)
+            mach_accel_outw(port & ~1, mach->byte_latch | (val << 8), priv);
+        else
+            mach->byte_latch = val;
+        return;
+    }
 
     if ((port & 0x8000) && (mach->local_cntl & 0x10)) {
         /*FIFO test mode: a write is only queued, for FIFO_TEST_DATA to read back.
@@ -6898,19 +6918,6 @@ mach_accel_outb(uint16_t port, uint8_t val, void *priv)
     mach_log(mach->log, "%04X:%08X: OUTB port=%04x, val=%02x, fifo idx=%d.\n", CS, cpu_state.pc, port, val, dev->fifo_idx);
 }
 
-/* DIAGNOSTIC, not for upstream: MACH8_SPLIT8=1 on an 8-bit bus card turns every 16- and
-   32-bit access into byte cycles, low byte first, as an 8-bit ISA slot delivers them. */
-static int
-mach_split8(mach_t *mach)
-{
-    static int on = -1;
-    if (on < 0) {
-        on = getenv("MACH8_SPLIT8") != NULL;
-        pclog("MACH8_SPLIT8=%d bus_width=%d\n", on, mach->bus_width_8bit);
-    }
-    return on && (mach->bus_width_8bit == 8);
-}
-
 static void
 mach_accel_outw(uint16_t port, uint16_t val, void *priv)
 {
@@ -6918,11 +6925,8 @@ mach_accel_outw(uint16_t port, uint16_t val, void *priv)
     svga_t *svga = &mach->svga;
     ibm8514_t *dev = (ibm8514_t *) svga->dev8514;
 
-    if (mach_split8(mach)) {
-        mach_accel_outb(port, val & 0xff, priv);
-        mach_accel_outb(port + 1, val >> 8, priv);
-        return;
-    }
+    if (port & 0x8000)
+        mach->byte_rd_valid = 0;
 
     if (port == 0xf6ee)
         port = 0x82e8;
@@ -6995,7 +6999,7 @@ mach_accel_outl(uint16_t port, uint32_t val, void *priv)
     svga_t *svga = &mach->svga;
     ibm8514_t *dev = (ibm8514_t *) svga->dev8514;
 
-    if (mach_split8(mach)) {
+    if (mach_byte_bus(mach)) {
         mach_accel_outw(port, val & 0xffff, priv);
         mach_accel_outw(port + 2, val >> 16, priv);
         return;
@@ -7085,6 +7089,21 @@ mach_accel_inb(uint16_t port, void *priv)
     svga_t *svga = &mach->svga;
     uint8_t temp;
 
+    if (mach_byte_bus(mach) && (port & 0x8000)) {
+        int pixtrans = ((port & ~1) == 0xe2e8) || ((port & ~1) == 0xe6e8);
+        if (!pixtrans)
+            return mach_accel_inw(port & ~1, priv) >> ((port & 1) << 3);
+        if (!mach->byte_rd_valid) {
+            mach->byte_rd       = mach_accel_inw(port & ~1, priv);
+            mach->byte_rd_valid = 1;
+        }
+        if (port & 1) {
+            mach->byte_rd_valid = 0;
+            return mach->byte_rd >> 8;
+        }
+        return mach->byte_rd & 0xff;
+    }
+
     if (port & 0x8000)
         temp = mach_accel_in_fifo(mach, svga, (ibm8514_t *) svga->dev8514, port, 1);
     else
@@ -7103,11 +7122,6 @@ mach_accel_inw(uint16_t port, void *priv)
     mach_t *mach = (mach_t *) priv;
     svga_t *svga = &mach->svga;
     uint16_t temp;
-
-    if (mach_split8(mach)) {
-        temp = mach_accel_inb(port, priv);
-        return temp | (mach_accel_inb(port + 1, priv) << 8);
-    }
 
     if (port & 0x8000)
         temp = mach_accel_in_fifo(mach, svga, (ibm8514_t *) svga->dev8514, port, 2);
@@ -7132,7 +7146,7 @@ mach_accel_inl(uint16_t port, void *priv)
     svga_t *svga = &mach->svga;
     uint32_t temp;
 
-    if (mach_split8(mach)) {
+    if (mach_byte_bus(mach)) {
         temp = mach_accel_inw(port, priv);
         return temp | ((uint32_t) mach_accel_inw(port + 2, priv) << 16);
     }
@@ -9260,6 +9274,9 @@ mach8_init(const device_t *info)
 
         video_inform(VIDEO_FLAG_TYPE_8514, &timing_gfxultra_isa);
         mach->bus_width_8bit = device_get_config_int("bus_width");
+        /* An 8-bit slot has no upper data lines, so a machine without a 16-bit bus forces JU1 to 8-bit. */
+        if (!machine_has_bus(machine, MACHINE_BUS_ISA16))
+            mach->bus_width_8bit = 8;
         /* On the Graphics Ultra the boot ROM and EEPROM hang off the VGA chip, so the mach8's
            own straps report EEPROM_ENA and ROM_ENA clear. CONFIG_STATUS_2: HIRES_BOOT and
            EPROM_16_ENA set, WRITE_PER_BIT and FLASH_ENA clear; bit 6 is reserved and reads set.

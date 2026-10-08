@@ -38,6 +38,9 @@ typedef struct mach_t {
     int vlb_bus;
     int has_bios;
     int bus_width_8bit;
+    uint8_t  byte_latch;
+    uint16_t byte_rd;
+    int      byte_rd_valid;
 
     uint8_t regs[256];
     uint8_t pci_regs[256];
