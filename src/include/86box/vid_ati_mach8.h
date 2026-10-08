@@ -198,6 +198,7 @@ typedef struct mach_t {
         uint8_t  clip_inside;
         uint8_t  clip_points_out;
         uint8_t  clip_exception;
+        uint8_t  compat_pitch;
         int      color_pattern_idx;
         int64_t  src_x_scan;
         int64_t  src_y_scan;

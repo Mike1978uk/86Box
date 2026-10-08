@@ -489,6 +489,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
     int16_t       clip_b    = dev->accel.clip_bottom;
     int16_t       clip_r    = dev->accel.clip_right;
     int           compat_scan = 0;
+    int           line_xmask  = -1;
     uint32_t      scan_pitch  = 0;
     uint32_t      scan_offset = 0;
 
@@ -1625,6 +1626,9 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
 
         case 3: /*Direct Linedraw (Polyline) from linedraw indexes (0xfeee)*/
         case 4:
+            /* 8514/A-compatible pitch (reset by 4AE8h or MEM_CNTL, left by a GE_PITCH write) plots X
+               modulo 1024 (ATI guide pp. 8-21, 8-22): TS2 sub-test 22 on the real card. */
+            line_xmask = (ATI_GRAPHICS_ULTRA && mach->accel.compat_pitch) ? 0x3ff : -1;
             if (!cpu_input) {
                 dev->accel.cx = dev->accel.cur_x;
                 dev->accel.cy = dev->accel.cur_y;
@@ -1731,7 +1735,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         src_dat = cpu_dat;
                                         break;
                                     case 3:
-                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + dev->accel.cx, src_dat);
+                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), src_dat);
                                         break;
                                     case 5:
                                         if (dev->bpp)
@@ -1744,7 +1748,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         break;
                                 }
 
-                                READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
+                                READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
 
                                 switch (compare_mode) {
                                     case 8: {
@@ -1785,7 +1789,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                                 }
                                 if ((mach->accel.dp_config & 0x10) && (cmd_type == 3)) {
-                                    WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
+                                    WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
                                 }
                             }
                         } else if (!ATI_GRAPHICS_ULTRA)
@@ -1865,7 +1869,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         src_dat = cpu_dat;
                                         break;
                                     case 3:
-                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + dev->accel.cx, src_dat);
+                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), src_dat);
                                         break;
                                     case 5:
                                         if (dev->bpp)
@@ -1879,14 +1883,14 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 }
 
                                 if (mach->accel.linedraw_opt & 0x02) {
-                                    READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + dev->accel.cx, poly_src);
+                                    READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), poly_src);
                                     poly_src = ((poly_src & rd_mask) == rd_mask);
                                     if (poly_src)
                                         mach->accel.poly_fill = !mach->accel.poly_fill;
                                 }
 
                                 if (mach->accel.poly_fill || !(mach->accel.linedraw_opt & 0x02)) {
-                                    READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
+                                    READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
 
                                     switch (compare_mode) {
                                         case 8: {
@@ -1930,10 +1934,10 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     if ((mach->accel.dp_config & 0x10) && (cmd_type == 3)) {
                                         if (mach->accel.linedraw_opt & 0x04) {
                                             if (dev->accel.sx < mach->accel.width) {
-                                                WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
+                                                WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
                                             }
                                         } else {
-                                            WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
+                                            WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
                                         }
                                     }
                                 }
@@ -2003,7 +2007,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         src_dat = cpu_dat;
                                         break;
                                     case 3:
-                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + dev->accel.cx, src_dat);
+                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), src_dat);
                                         break;
                                     case 5:
                                         if (dev->bpp)
@@ -2016,7 +2020,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         break;
                                 }
 
-                                READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
+                                READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
 
                                 switch (compare_mode) {
                                     case 8: {
@@ -2058,7 +2062,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 }
 
                                 if ((mach->accel.dp_config & 0x10) && (cmd_type == 3)) {
-                                    WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
+                                    WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
                                 }
                             }
                         } else if (!ATI_GRAPHICS_ULTRA)
@@ -2138,7 +2142,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         src_dat = cpu_dat;
                                         break;
                                     case 3:
-                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + dev->accel.cx, src_dat);
+                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), src_dat);
                                         break;
                                     case 5:
                                         if (dev->bpp)
@@ -2152,14 +2156,14 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 }
 
                                 if (mach->accel.linedraw_opt & 0x02) {
-                                    READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + dev->accel.cx, poly_src);
+                                    READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), poly_src);
                                     poly_src = ((poly_src & rd_mask) == rd_mask);
                                     if (poly_src)
                                         mach->accel.poly_fill = !mach->accel.poly_fill;
                                 }
 
                                 if (mach->accel.poly_fill || !(mach->accel.linedraw_opt & 0x02)) {
-                                    READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
+                                    READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
 
                                     switch (compare_mode) {
                                         case 8: {
@@ -2203,10 +2207,10 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     if ((mach->accel.dp_config & 0x10) && (cmd_type == 3)) {
                                         if (mach->accel.linedraw_opt & 0x04) {
                                             if (dev->accel.sx < mach->accel.width) {
-                                                WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
+                                                WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
                                             }
                                         } else {
-                                            WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
+                                            WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
                                         }
                                     }
                                 }
@@ -4870,6 +4874,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             } else {
                 dev->ext_pitch = 1024;
                 dev->ext_crt_pitch = 128;
+                mach->accel.compat_pitch = 1;
                 mach_set_resolution(mach, svga);
             }
             break;
@@ -5127,6 +5132,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                     if (!ATI_MACH32) {
                         dev->ext_pitch = 1024;
                         dev->ext_crt_pitch = 128;
+                        mach->accel.compat_pitch = 1;
                         svga_recalctimings(svga);
                     }
                 }
@@ -5513,6 +5519,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 WRITE8(port, mach->accel.ge_pitch, val);
             }
             dev->ext_pitch = ((mach->accel.ge_pitch & 0xff) << 3);
+            mach->accel.compat_pitch = 0;
             /* Graphics Ultra (M8EXP on the real card): GE_PITCH applies to the extended drawing
                path at once, without a mode set. */
             if (ATI_GRAPHICS_ULTRA) {
@@ -9542,6 +9549,7 @@ mach8_init(const device_t *info)
     dev->on = 0;
     dev->pitch = 1024;
     dev->ext_pitch = 1024;
+    mach->accel.compat_pitch = 1;
     dev->ext_crt_pitch = 0x80;
     dev->accel_bpp = 8;
     svga->force_old_addr = 1;
@@ -9610,6 +9618,7 @@ ati8514_init(svga_t *svga, void *ext8514, void *dev8514)
     dev->on = 0;
     dev->pitch = 1024;
     dev->ext_pitch = 1024;
+    mach->accel.compat_pitch = 1;
     dev->ext_crt_pitch = 0x80;
     dev->accel_bpp = 8;
     dev->rowoffset = 0x80;
