@@ -1468,6 +1468,41 @@ svga_poll(void *priv)
     int        old_ma;
 
     svga_log("SVGA Poll.\n");
+    /* DIAGNOSTIC, not for upstream: MACH8_VGADUMP=1 logs, every few seconds, what decides whether the
+       VGA picture shows (render, DAC mask and palette, sequencer screen-off, attribute enable, 8514/A
+       state) and the 80x25 text screen as the text renderer would address it. */
+    {
+        static int      vd_on  = -1;
+        static uint32_t vd_ctr = 0;
+
+        if (vd_on < 0)
+            vd_on = getenv("MACH8_VGADUMP") != NULL;
+        if (vd_on && (++vd_ctr >= 200000)) {
+            const ibm8514_t *vdev = (ibm8514_t *) svga->dev8514;
+            char             line[81];
+            uint32_t         base = svga->memaddr_latch << 2;
+
+            vd_ctr = 0;
+            pclog("VGADUMP render=%s render8514=%p 8514on=%d dacmask=%02X seq1=%02X attrpal=%02X crtc17=%02X misc=%02X gdc6=%02X "
+                  "rowoff=%u latch=%05X pal0=%02X%02X%02X pal7=%02X%02X%02X\n",
+                  (svga->render == svga_render_blank) ? "BLANK" : "other", (void *) svga->render8514, vdev ? vdev->on : -1,
+                  svga->dac_mask, svga->seqregs[1], svga->attr_palette_enable, svga->crtc[0x17], svga->miscout, svga->gdcreg[6],
+                  svga->rowoffset, svga->memaddr_latch, svga->vgapal[0].r, svga->vgapal[0].g, svga->vgapal[0].b,
+                  svga->vgapal[7].r, svga->vgapal[7].g, svga->vgapal[7].b);
+            for (int r = 0; r < 25; r++) {
+                for (int c = 0; c < 80; c++) {
+                    uint32_t ma   = base + (r * (svga->rowoffset << 3)) + (c << 2);
+                    uint32_t addr = (svga->force_old_addr || !svga->remap_func) ? ((ma << 1) & svga->vram_display_mask)
+                                                                                 : (svga->remap_func(svga, ma) & svga->vram_display_mask);
+                    uint8_t  ch   = svga->vram[addr];
+
+                    line[c] = ((ch >= 0x20) && (ch < 0x7f)) ? ch : '.';
+                }
+                line[80] = 0;
+                pclog("VGADUMP %02d|%s|\n", r, line);
+            }
+        }
+    }
     if (!svga->linepos) {
         if (svga->displine == ((svga->hwcursor_latch.y < 0) ? 0 : svga->hwcursor_latch.y) && svga->hwcursor_latch.ena) {
             svga->hwcursor_on      = svga->hwcursor_latch.cur_ysize - svga->hwcursor_latch.yoff;
