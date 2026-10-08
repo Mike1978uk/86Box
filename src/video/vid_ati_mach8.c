@@ -6324,6 +6324,13 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                             dev->data_available = 1;
                         }
 
+                        { /*DIAGNOSTIC, not for upstream: MACH8_RLOG=1 logs each 8514/A PIX_TRANS read with where it was taken.*/
+                            static int rl_on = -1;
+                            if (rl_on < 0)
+                                rl_on = getenv("MACH8_RLOG") != NULL;
+                            if (rl_on)
+                                pclog("M8R cmd=%04X x=%d y=%d val=%04X\n", dev->accel.cmd, dev->accel.cx, dev->accel.cy, temp);
+                        }
                         mach_log(mach->log,"%04X:%08X: Opcode=%d, Len=%d, port=0x%04x, input=%d, temp=0x%04x, fullcmd=0x%04x, crx=%d, cry=%d, frgdsel=%x, bkgdsel=%x, majaxispoint=%d.\n", CS, cpu_state.pc, cmd, len, port, dev->accel.input, temp, dev->accel.cmd, dev->accel.cx, dev->accel.cy, dev->accel.frgd_sel, dev->accel.bkgd_sel, dev->accel.maj_axis_pcnt);
 
                         if (blit_rd)
