@@ -4049,6 +4049,11 @@ mach8_recalctimings(svga_t *svga)
         }
     }
 
+    /* MAX_WAITSTATES bit 10, PASSTHROUGH_OVERRIDE: with it set the DAC no longer takes the VGA
+       pixels, so the VGA sync still reaches the monitor but the picture is black. */
+    if (!dev->on && (mach->accel.max_waitstates & 0x400))
+        svga->render = svga_render_blank;
+
     svga->hoverride = 1;
 }
 
@@ -5365,6 +5370,8 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 WRITE8(port, mach->accel.max_waitstates, val);
             }
             mach_log(mach->log,"ATI 8514/A: (0x%04x) val=0x%02x, len=%d.\n", port, val, len);
+            if (ATI_GRAPHICS_ULTRA)
+                svga_recalctimings(svga);
             break;
 
         case 0x6eee:
@@ -6704,6 +6711,13 @@ mach_accel_in_call(uint16_t port, mach_t *mach, svga_t *svga, ibm8514_t *dev, in
                 temp = mach->accel.max_waitstates;
             else {
                 READ8(port, mach->accel.max_waitstates);
+            }
+            /* The Graphics Ultra reads back the wait-state byte only; bits 8-15 read 0. */
+            if (ATI_GRAPHICS_ULTRA) {
+                if (len == 2)
+                    temp &= 0x00ff;
+                else if (port & 1)
+                    temp = 0;
             }
             break;
 
