@@ -6911,7 +6911,8 @@ mach_accel_in_call(uint16_t port, mach_t *mach, svga_t *svga, ibm8514_t *dev, in
                     temp |= 0x2000;
 
                 mach->force_busy = 0;
-                if (ati_eeprom_read(&mach->eeprom))
+                /*The Graphics Ultra reads EE_DATA_IN as 0 while the EEPROM is not selected (M8REGS on the card).*/
+                if (ati_eeprom_read(&mach->eeprom) && (!ATI_GRAPHICS_ULTRA || mach->eeprom.oldena))
                     temp |= 0x4000;
                 if (ATI_GRAPHICS_ULTRA) /*pre-clip status, see mach_clip_point()*/
                     temp |= (mach->accel.clip_points_out << 15) | (mach->accel.clip_flags << 9) | (mach->accel.clip_inside << 8);
@@ -6922,7 +6923,7 @@ mach_accel_in_call(uint16_t port, mach_t *mach, svga_t *svga, ibm8514_t *dev, in
 
                     mach->force_busy = 0;
 
-                    if (ati_eeprom_read(&mach->eeprom))
+                    if (ati_eeprom_read(&mach->eeprom) && (!ATI_GRAPHICS_ULTRA || mach->eeprom.oldena))
                         temp |= 0x40;
                     if (ATI_GRAPHICS_ULTRA)
                         temp |= (mach->accel.clip_points_out << 7) | (mach->accel.clip_flags << 1) | mach->accel.clip_inside;
