@@ -6103,7 +6103,29 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                 if (ibm8514_cpu_dest(svga)) {
                     cmd = (dev->accel.cmd >> 13);
                     if (len == 2) {
-                        READ_PIXTRANS_WORD(dev->accel.cx, 0)
+                        if (ATI_GRAPHICS_ULTRA && !dev->bpp && (dev->accel.cmd & 0x02) && !(dev->accel.cmd & 0xe0)) {
+                            /* Planar read (CMD bit 1): one bit per pixel, bits 4..1 = columns 0..3 of each
+                               aligned group (Richter & Smith p. 299). A pixel is 1 when every RD_MASK plane
+                               is set, and an IBM monochrome read takes RD_MASK rotated left one bit (ATI
+                               guide p. 8-48). A 16-bit read carries two groups; the first is built in the
+                               low byte here, as the swap below expects. TS2 sub-tests 2-11 match. */
+                            uint8_t rdm   = ((dev->accel.rd_mask & 0x01) << 7) | ((dev->accel.rd_mask & 0xfe) >> 1);
+                            int     ngrp  = (dev->accel.cmd & 0x200) ? 2 : 1;
+                            int     x     = dev->accel.cx;
+
+                            temp = 0;
+                            for (int g = 0; g < ngrp; g++) {
+                                uint8_t nug = 0;
+                                do {
+                                    uint8_t px = dev->vram[((dev->accel.cy * dev->pitch) + x) & dev->vram_mask];
+                                    if ((px & rdm) == rdm)
+                                        nug |= 1 << (4 - (x & 3));
+                                    x++;
+                                } while (x & 3);
+                                temp |= nug << (8 * g);
+                            }
+                        } else
+                            READ_PIXTRANS_WORD(dev->accel.cx, 0)
                         if (dev->subsys_stat & INT_VSY) {
                             dev->force_busy = 1;
                             dev->data_available = 1;
