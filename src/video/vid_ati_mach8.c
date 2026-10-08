@@ -6136,6 +6136,7 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                                         nug |= 1 << (4 - (x & 3));
                                     x++;
                                 } while (x & 3);
+                                nug |= 0x01; /*the card returns the reserved bit 0 set*/
                                 temp |= nug << (8 * g);
                             }
                         } else
