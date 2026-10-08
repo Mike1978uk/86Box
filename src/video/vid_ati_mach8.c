@@ -1647,6 +1647,13 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 dev->accel.sx = 0;
                 mach->accel.poly_fill = 0;
 
+                /* Length and error term belong to the whole line; host-data calls continue it a word at a time. */
+                mach->accel.width = (dev->accel.dx > dev->accel.dy) ? (dev->accel.dx >> 1) : (dev->accel.dy >> 1);
+                if (dev->accel.dx > dev->accel.dy)
+                    mach->accel.err = (dev->accel.dy - dev->accel.dx) >> 1;
+                else
+                    mach->accel.err = (dev->accel.dx - dev->accel.dy) >> 1;
+
                 mach_log(mach->log,"Linedraw: c(%d,%d), d(%d,%d), cend(%d,%d), bounds: l=%d, r=%d, t=%d, b=%d.\n",
                          dev->accel.cur_x, dev->accel.cur_y, dev->accel.dx, dev->accel.dy, mach->accel.cx_end_line,
                          mach->accel.cy_end_line, mach->accel.bleft, mach->accel.bright, mach->accel.btop, mach->accel.bbottom);
@@ -1677,15 +1684,23 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 dev->accel.temp_cnt = 8;
             }
 
-            count = (dev->accel.dx > dev->accel.dy) ? (dev->accel.dx >> 1) : (dev->accel.dy >> 1);
-            mach->accel.width = count;
-            /* Graphics Ultra (M8ROW3 on the real card, TS1 op 112): the line reaches its end point;
-               LINEDRAW_OPT bit 2 decides whether that pixel is written. */
-            if (ATI_GRAPHICS_ULTRA)
-                count++;
+            {
+                int total = mach->accel.width;
+                /* Graphics Ultra (M8ROW3 on the real card, TS1 op 112): the line reaches its end point;
+                   LINEDRAW_OPT bit 2 decides whether that pixel is written. */
+                if (ATI_GRAPHICS_ULTRA)
+                    total++;
+                if (cpu_input) {
+                    /* One PIX_TRANS word supplies only its own pixels. */
+                    if (count > (total - dev->accel.sx))
+                        count = total - dev->accel.sx;
+                    if (count < 0)
+                        count = 0;
+                } else
+                    count = total;
+            }
 
             if (dev->accel.dx > dev->accel.dy) {
-                mach->accel.err = (dev->accel.dy - dev->accel.dx) >> 1;
                 if (mono_src == 1) {
                     while (count--) {
                         if (!dev->accel.temp_cnt) {
@@ -1956,7 +1971,6 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                     }
                 }
             } else {
-                mach->accel.err = (dev->accel.dx - dev->accel.dy) >> 1;
                 if (mono_src == 1) {
                     while (count--) {
                         if (dev->accel.temp_cnt == 0) {
