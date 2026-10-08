@@ -6120,9 +6120,33 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                 }
             } else {
                 if (ibm8514_cpu_dest(svga)) {
+                    int blit_rd = 0;
+
                     cmd = (dev->accel.cmd >> 13);
                     if (len == 2) {
-                        if (ATI_GRAPHICS_ULTRA && !dev->bpp && (dev->accel.cmd & 0x02) && !(dev->accel.cmd & 0xe0)) {
+                        if (ATI_GRAPHICS_ULTRA && !dev->bpp && (cmd == 6)) {
+                            /* BitBLT read: NIBBLE mode from the source trajectory, still drawing to the
+                               destination (ATI guide p. 8-34). Each byte is the AND of the source pixels in
+                               one screen-aligned group of four, only those on the trajectory; RD_MASK has no
+                               effect. Bytes run on across rows. A 16-bit read carries two; the first is built
+                               in the low byte here, as the swap below expects. */
+                            int ngrp = (dev->accel.cmd & 0x200) ? 2 : 1;
+
+                            blit_rd = 1;
+                            temp    = 0;
+                            for (int g = 0; (g < ngrp) && !dev->accel.cmd_back; g++) {
+                                uint8_t nug = 0xff;
+                                int     cy, grp;
+
+                                do {
+                                    cy  = dev->accel.cy;
+                                    grp = dev->accel.cx >> 2;
+                                    nug &= dev->vram[(dev->accel.src + dev->accel.cx) & dev->vram_mask];
+                                    ibm8514_accel_start(8, 1, 0xffffffff, 0, svga, len);
+                                } while (!dev->accel.cmd_back && (dev->accel.cy == cy) && ((dev->accel.cx >> 2) == grp));
+                                temp |= nug << (8 * g);
+                            }
+                        } else if (ATI_GRAPHICS_ULTRA && !dev->bpp && (dev->accel.cmd & 0x02) && !(dev->accel.cmd & 0xe0)) {
                             /* Planar read (CMD bit 1): one bit per pixel, bits 4..1 = columns 0..3 of each
                                aligned group (Richter & Smith p. 299). A pixel is 1 when every RD_MASK plane
                                is set, and an IBM monochrome read takes RD_MASK rotated left one bit (ATI
@@ -6153,7 +6177,9 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
 
                         mach_log(mach->log,"%04X:%08X: Opcode=%d, Len=%d, port=0x%04x, input=%d, temp=0x%04x, fullcmd=0x%04x, crx=%d, cry=%d, frgdsel=%x, bkgdsel=%x, majaxispoint=%d.\n", CS, cpu_state.pc, cmd, len, port, dev->accel.input, temp, dev->accel.cmd, dev->accel.cx, dev->accel.cy, dev->accel.frgd_sel, dev->accel.bkgd_sel, dev->accel.maj_axis_pcnt);
 
-                        if (dev->accel.input || dev->accel.input3) {
+                        if (blit_rd)
+                            ; /*the engine has already stepped*/
+                        else if (dev->accel.input || dev->accel.input3) {
                             ibm8514_accel_out_pixtrans(svga, port, temp & 0xff, len);
                             if (dev->accel.odd_in) { /*WORDs on odd destination scan lengths.*/
                                 dev->accel.odd_in = 0;
