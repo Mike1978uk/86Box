@@ -489,7 +489,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
     int16_t       clip_b    = dev->accel.clip_bottom;
     int16_t       clip_r    = dev->accel.clip_right;
     int           compat_scan = 0;
-    int           line_xmask  = -1;
+    int           x_mask      = -1;
     uint32_t      scan_pitch  = 0;
     uint32_t      scan_offset = 0;
 
@@ -1628,7 +1628,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
         case 4:
             /* 8514/A-compatible pitch (reset by 4AE8h or MEM_CNTL, left by a GE_PITCH write) plots X
                modulo 1024 (ATI guide pp. 8-21, 8-22): TS2 sub-test 22 on the real card. */
-            line_xmask = (ATI_GRAPHICS_ULTRA && mach->accel.compat_pitch) ? 0x3ff : -1;
+            x_mask = (ATI_GRAPHICS_ULTRA && mach->accel.compat_pitch) ? 0x3ff : -1;
             if (!cpu_input) {
                 dev->accel.cx = dev->accel.cur_x;
                 dev->accel.cy = dev->accel.cur_y;
@@ -1735,7 +1735,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         src_dat = cpu_dat;
                                         break;
                                     case 3:
-                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), src_dat);
+                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & x_mask), src_dat);
                                         break;
                                     case 5:
                                         if (dev->bpp)
@@ -1748,7 +1748,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         break;
                                 }
 
-                                READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
+                                READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & x_mask), dest_dat);
 
                                 switch (compare_mode) {
                                     case 8: {
@@ -1789,7 +1789,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                                 }
                                 if ((mach->accel.dp_config & 0x10) && (cmd_type == 3)) {
-                                    WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
+                                    WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & x_mask), dest_dat);
                                 }
                             }
                         } else if (!ATI_GRAPHICS_ULTRA)
@@ -1869,7 +1869,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         src_dat = cpu_dat;
                                         break;
                                     case 3:
-                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), src_dat);
+                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & x_mask), src_dat);
                                         break;
                                     case 5:
                                         if (dev->bpp)
@@ -1883,14 +1883,14 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 }
 
                                 if (mach->accel.linedraw_opt & 0x02) {
-                                    READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), poly_src);
+                                    READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & x_mask), poly_src);
                                     poly_src = ((poly_src & rd_mask) == rd_mask);
                                     if (poly_src)
                                         mach->accel.poly_fill = !mach->accel.poly_fill;
                                 }
 
                                 if (mach->accel.poly_fill || !(mach->accel.linedraw_opt & 0x02)) {
-                                    READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
+                                    READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & x_mask), dest_dat);
 
                                     switch (compare_mode) {
                                         case 8: {
@@ -1934,10 +1934,10 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     if ((mach->accel.dp_config & 0x10) && (cmd_type == 3)) {
                                         if (mach->accel.linedraw_opt & 0x04) {
                                             if (dev->accel.sx < mach->accel.width) {
-                                                WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
+                                                WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & x_mask), dest_dat);
                                             }
                                         } else {
-                                            WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
+                                            WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & x_mask), dest_dat);
                                         }
                                     }
                                 }
@@ -2007,7 +2007,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         src_dat = cpu_dat;
                                         break;
                                     case 3:
-                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), src_dat);
+                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & x_mask), src_dat);
                                         break;
                                     case 5:
                                         if (dev->bpp)
@@ -2020,7 +2020,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         break;
                                 }
 
-                                READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
+                                READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & x_mask), dest_dat);
 
                                 switch (compare_mode) {
                                     case 8: {
@@ -2062,7 +2062,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 }
 
                                 if ((mach->accel.dp_config & 0x10) && (cmd_type == 3)) {
-                                    WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
+                                    WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & x_mask), dest_dat);
                                 }
                             }
                         } else if (!ATI_GRAPHICS_ULTRA)
@@ -2142,7 +2142,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                         src_dat = cpu_dat;
                                         break;
                                     case 3:
-                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), src_dat);
+                                        READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & x_mask), src_dat);
                                         break;
                                     case 5:
                                         if (dev->bpp)
@@ -2156,14 +2156,14 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 }
 
                                 if (mach->accel.linedraw_opt & 0x02) {
-                                    READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & line_xmask), poly_src);
+                                    READ(mach->accel.src_ge_offset + (dev->accel.cy * mach->accel.src_pitch) + (dev->accel.cx & x_mask), poly_src);
                                     poly_src = ((poly_src & rd_mask) == rd_mask);
                                     if (poly_src)
                                         mach->accel.poly_fill = !mach->accel.poly_fill;
                                 }
 
                                 if (mach->accel.poly_fill || !(mach->accel.linedraw_opt & 0x02)) {
-                                    READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
+                                    READ(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & x_mask), dest_dat);
 
                                     switch (compare_mode) {
                                         case 8: {
@@ -2207,10 +2207,10 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     if ((mach->accel.dp_config & 0x10) && (cmd_type == 3)) {
                                         if (mach->accel.linedraw_opt & 0x04) {
                                             if (dev->accel.sx < mach->accel.width) {
-                                                WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
+                                                WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & x_mask), dest_dat);
                                             }
                                         } else {
-                                            WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & line_xmask), dest_dat);
+                                            WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + (dev->accel.cx & x_mask), dest_dat);
                                         }
                                     }
                                 }
@@ -2259,6 +2259,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
             break;
 
         case 5: /*Horizontal Raster Draw from scan_to_x register (0xcaee)*/
+            x_mask = (ATI_GRAPHICS_ULTRA && mach->accel.compat_pitch) ? 0x3ff : -1; /*as case 3*/
             /* A horizontal raster draw can also be driven purely through the
                8514/A-compatible register view: the ATI Graphics Ultra BIOS sets
                FRGD_MIX (BAE8), FRGD_COLOR (A6E8), CUR_X and CUR_Y and then writes
@@ -2437,8 +2438,8 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         (dev->accel.dy >= clip_t) &&
                         (dev->accel.dy <= clip_b)) {
                         dev->subsys_stat |= INT_GE_BSY;
-                        READ(dev->accel.src + cx, src_dat);
-                        READ(dev->accel.dest + dev->accel.dx, dest_dat);
+                        READ(dev->accel.src + (cx & x_mask), src_dat);
+                        READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
                         switch (compare_mode) {
                             case 8: {
@@ -2479,7 +2480,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                         }
 
-                        WRITE(dev->accel.dest + dev->accel.dx, dest_dat);
+                        WRITE(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                     }
 
                     cx += mach->accel.src_stepx;
@@ -2571,7 +2572,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         }
                         break;
                     case 3:
-                        READ(dev->accel.src + dev->accel.cx, mix);
+                        READ(dev->accel.src + (dev->accel.cx & x_mask), mix);
                         mix = (mix & rd_mask) == rd_mask;
                         break;
 
@@ -2599,7 +2600,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     src_dat = cpu_dat;
                                 break;
                             case 3:
-                                READ(dev->accel.src + dev->accel.cx, src_dat);
+                                READ(dev->accel.src + (dev->accel.cx & x_mask), src_dat);
                                 if (mono_src == 3)
                                     src_dat = (src_dat & rd_mask) == rd_mask;
                                 break;
@@ -2614,7 +2615,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                 break;
                         }
 
-                        READ(dev->accel.dest + dev->accel.dx, dest_dat);
+                        READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
                         switch (compare_mode) {
                             case 8: {
@@ -2656,7 +2657,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         }
 
                         if (compat_scan || (mach->accel.dp_config & 0x10)) {
-                            WRITE(dev->accel.dest + dev->accel.dx, dest_dat);
+                            WRITE(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                         }
                     }
                 }
