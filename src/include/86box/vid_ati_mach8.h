@@ -192,6 +192,12 @@ typedef struct mach_t {
         int      poly_fill;
         uint16_t dst_clr_cmp_mask;
         int      clip_overrun;
+        int16_t  clip_x;
+        int16_t  clip_y;
+        uint8_t  clip_flags;
+        uint8_t  clip_inside;
+        uint8_t  clip_points_out;
+        uint8_t  clip_exception;
         int      color_pattern_idx;
         int64_t  src_x_scan;
         int64_t  src_y_scan;

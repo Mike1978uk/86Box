@@ -1717,7 +1717,8 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             (dev->accel.cy >= clip_t) &&
                             (dev->accel.cy <= clip_b)) {
                             dev->subsys_stat |= INT_GE_BSY;
-                            mach->accel.clip_overrun = 0;
+                            if (!ATI_GRAPHICS_ULTRA) /*the Graphics Ultra counts pre-clip exceptions instead*/
+                                mach->accel.clip_overrun = 0;
                             if (mach_pixel_write(mach) || !cpu_input) {
                                 switch (mix ? frgd_sel : bkgd_sel) {
                                     case 0:
@@ -1787,7 +1788,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
                                 }
                             }
-                        } else
+                        } else if (!ATI_GRAPHICS_ULTRA)
                             mach->accel.clip_overrun = ((mach->accel.clip_overrun + 1) & 0x0f);
 
                         if (!count) {
@@ -1850,7 +1851,8 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             (dev->accel.cy >= clip_t) &&
                             (dev->accel.cy <= clip_b)) {
                             dev->subsys_stat |= INT_GE_BSY;
-                            mach->accel.clip_overrun = 0;
+                            if (!ATI_GRAPHICS_ULTRA)
+                                mach->accel.clip_overrun = 0;
                             if (mach_pixel_write(mach) || !cpu_input) {
                                 switch (mix ? frgd_sel : bkgd_sel) {
                                     case 0:
@@ -1936,7 +1938,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     }
                                 }
                             }
-                        } else
+                        } else if (!ATI_GRAPHICS_ULTRA)
                             mach->accel.clip_overrun = ((mach->accel.clip_overrun + 1) & 0x0f);
 
                         if (dev->accel.sx >= mach->accel.width) {
@@ -1987,7 +1989,8 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             (dev->accel.cy >= clip_t) &&
                             (dev->accel.cy <= clip_b)) {
                             dev->subsys_stat |= INT_GE_BSY;
-                            mach->accel.clip_overrun = 0;
+                            if (!ATI_GRAPHICS_ULTRA)
+                                mach->accel.clip_overrun = 0;
                             if (mach_pixel_write(mach) || !cpu_input) {
                                 switch (mix ? frgd_sel : bkgd_sel) {
                                     case 0:
@@ -2058,7 +2061,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     WRITE(mach->accel.dst_ge_offset + (dev->accel.cy * mach->accel.dst_pitch) + dev->accel.cx, dest_dat);
                                 }
                             }
-                        } else
+                        } else if (!ATI_GRAPHICS_ULTRA)
                             mach->accel.clip_overrun = ((mach->accel.clip_overrun + 1) & 0x0f);
 
                         if (!count) {
@@ -2121,7 +2124,8 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             (dev->accel.cy >= clip_t) &&
                             (dev->accel.cy <= clip_b)) {
                             dev->subsys_stat |= INT_GE_BSY;
-                            mach->accel.clip_overrun = 0;
+                            if (!ATI_GRAPHICS_ULTRA)
+                                mach->accel.clip_overrun = 0;
                             if (mach_pixel_write(mach) || !cpu_input) {
                                 switch (mix ? frgd_sel : bkgd_sel) {
                                     case 0:
@@ -2207,7 +2211,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     }
                                 }
                             }
-                        } else
+                        } else if (!ATI_GRAPHICS_ULTRA)
                             mach->accel.clip_overrun = ((mach->accel.clip_overrun + 1) & 0x0f);
 
                         if (dev->accel.sx >= mach->accel.width) {
@@ -4344,6 +4348,97 @@ mach_ssv_drain(svga_t *svga, ibm8514_t *dev, uint8_t byte)
     } while (!last && guard--);
 }
 
+/* Graphics Ultra LINEDRAW pre-clip (ATI guide p. 7-10 table, pp. 9-29 to 9-34, EXT_GE_STATUS p. 9-68).
+   Device space is -512..1535. CLIP_FLAGS are the last point's outcodes, 1 = outside. Not in the guide,
+   fitted to TS2 sub-tests 25-71 on the real card (tools/m8seq/m8ts2_clip_fit.py): POINTS_OUTSIDE is
+   cleared by a start point; CLIP_INSIDE is set by an accepted line not wholly beyond one edge, cleared by
+   a rejected line, a rejected start point or a bounds point, kept through an exception, and never set in
+   CLIP_MODE 0; CLIP_MODE 0 drops a line with an endpoint outside device space. */
+static uint8_t
+mach_clip_outcode(ibm8514_t *dev, int16_t x, int16_t y)
+{
+    uint8_t c = 0;
+
+    if (y < dev->accel.clip_top)
+        c |= 8;
+    if (y > dev->accel.clip_bottom)
+        c |= 4;
+    if (x < dev->accel.clip_left)
+        c |= 2;
+    if (x > dev->accel.clip_right)
+        c |= 1;
+    return c;
+}
+
+static int
+mach_clip_in_device(int16_t x, int16_t y)
+{
+    return (x >= -512) && (x <= 1535) && (y >= -512) && (y <= 1535);
+}
+
+static int
+mach_clip_rejected(mach_t *mach, uint8_t ca, uint8_t cb)
+{
+    switch ((mach->accel.linedraw_opt >> 9) & 3) {
+        case 1:
+            return (ca & cb) != 0;
+        case 2:
+            return (ca & cb & 0x0d) != 0; /*polygon lines left of the scissor are clamped onto it*/
+        default:
+            return 0;
+    }
+}
+
+/* Classifies the point just written at LINEDRAW index idx (1 start, 3 end, 5 bounds). Returns 1 when
+   the engine must not draw: a pending or new exception, a rejected line (a move) or a dropped line. */
+static int
+mach_clip_point(mach_t *mach, ibm8514_t *dev, int idx, int16_t x, int16_t y)
+{
+    int     mode = (mach->accel.linedraw_opt >> 9) & 3;
+    uint8_t ca   = mach_clip_outcode(dev, mach->accel.clip_x, mach->accel.clip_y);
+    uint8_t cb   = mach_clip_outcode(dev, x, y);
+    int     a_in = mach_clip_in_device(mach->accel.clip_x, mach->accel.clip_y);
+    int     b_in = mach_clip_in_device(x, y);
+
+    mach->accel.clip_flags = cb;
+    if (idx != 3) {
+        mach->accel.clip_points_out = !b_in;
+        mach->accel.clip_overrun    = 0;
+        mach->accel.clip_exception  = 0;
+        if ((idx == 5) || !mode || mach_clip_rejected(mach, cb, cb))
+            mach->accel.clip_inside = 0;
+        mach->accel.clip_x = x;
+        mach->accel.clip_y = y;
+        return 1;
+    }
+
+    if (!b_in)
+        mach->accel.clip_points_out = 1;
+    if (mach->accel.clip_exception) {
+        mach->accel.clip_overrun = (mach->accel.clip_overrun + 1) & 0x0f;
+        return 1;
+    }
+    if (!mode) {
+        mach->accel.clip_inside = 0;
+        if (!a_in || !b_in)
+            return 1;
+    } else if (mach_clip_rejected(mach, ca, cb)) {
+        mach->accel.clip_inside = 0;
+        mach->accel.clip_x      = x;
+        mach->accel.clip_y      = y;
+        return 1;
+    } else if (a_in && b_in)
+        mach->accel.clip_inside = !(ca & cb & ((mode == 2) ? 0x0d : 0x0f));
+    else {
+        mach->accel.clip_exception = 1;
+        mach->accel.clip_overrun   = 1;
+        return 1;
+    }
+    mach->accel.clip_x = x;
+    mach->accel.clip_y = y;
+    return 0;
+}
+
 static void
 mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, uint16_t val, int len)
 {
@@ -5870,6 +5965,22 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                     if (py > mach->accel.bbottom)
                         mach->accel.bbottom = py;
                 }
+                if (ATI_GRAPHICS_ULTRA && (mach->accel.line_idx & 1)) {
+                    int skip = mach_clip_point(mach, dev, mach->accel.line_idx,
+                                               mach->accel.line_array[mach->accel.line_idx - 1],
+                                               mach->accel.line_array[mach->accel.line_idx]);
+
+                    /*CUR reads back where the engine is: still the start after an exception or a dropped line.*/
+                    mach->accel.cx_end_line = mach->accel.clip_x;
+                    mach->accel.cy_end_line = mach->accel.clip_y;
+                    if (skip && (mach->accel.line_idx == 3)) {
+                        mach->accel.line_array[0] = mach->accel.clip_x;
+                        mach->accel.line_array[1] = mach->accel.clip_y;
+                        mach->accel.cmd_type      = 3;
+                        mach->accel.line_idx      = 2;
+                        break;
+                    }
+                }
                 if (mach->accel.line_idx == 5) {
                     /*Index 5 sets the current Y and returns to index 4: a move, not a draw.*/
                     dev->accel.cur_x        = mach->accel.line_array[4] & 0x7ff;
@@ -5931,14 +6042,14 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
     switch (port) {
         case 0x82e8:
             if ((mach->accel.cmd_type == 3) || (mach->accel.cmd_type == 4))
-                temp = mach->accel.cy_end_line;
+                temp = ATI_GRAPHICS_ULTRA ? (mach->accel.cy_end_line & 0x7ff) : mach->accel.cy_end_line; /*11 bits on the card*/
             else
                 temp = ibm8514_accel_in_fifo(svga, port, len);
             break;
 
         case 0x86e8:
             if ((mach->accel.cmd_type == 3) || (mach->accel.cmd_type == 4))
-                temp = mach->accel.cx_end_line;
+                temp = ATI_GRAPHICS_ULTRA ? (mach->accel.cx_end_line & 0x7ff) : mach->accel.cx_end_line; /*11 bits on the card*/
             else
                 temp = ibm8514_accel_in_fifo(svga, port, len);
             break;
@@ -6802,6 +6913,8 @@ mach_accel_in_call(uint16_t port, mach_t *mach, svga_t *svga, ibm8514_t *dev, in
                 mach->force_busy = 0;
                 if (ati_eeprom_read(&mach->eeprom))
                     temp |= 0x4000;
+                if (ATI_GRAPHICS_ULTRA) /*pre-clip status, see mach_clip_point()*/
+                    temp |= (mach->accel.clip_points_out << 15) | (mach->accel.clip_flags << 9) | (mach->accel.clip_inside << 8);
             } else {
                 if (port & 1) {
                     if (mach->force_busy)
@@ -6811,6 +6924,8 @@ mach_accel_in_call(uint16_t port, mach_t *mach, svga_t *svga, ibm8514_t *dev, in
 
                     if (ati_eeprom_read(&mach->eeprom))
                         temp |= 0x40;
+                    if (ATI_GRAPHICS_ULTRA)
+                        temp |= (mach->accel.clip_points_out << 7) | (mach->accel.clip_flags << 1) | mach->accel.clip_inside;
                 } else
                     temp = mach->accel.clip_overrun;
             }
