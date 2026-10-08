@@ -5765,6 +5765,11 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 mach->accel.dp_config = val;
                 mach->accel.dp_compat = 0;
                 mach->accel.src_reload = 1;
+                /* Graphics Ultra (M8BLRD on the real card): FG_COLOR_SRC also becomes the 8514/A
+                   foreground source, so the register written last chooses it for 8514/A commands
+                   too. The background and mono sources are not measured. */
+                if (ATI_GRAPHICS_ULTRA && (mach_frgd_sel(mach, dev) <= 3))
+                    dev->accel.frgd_sel = mach_frgd_sel(mach, dev);
             }
             break;
 
