@@ -3617,8 +3617,8 @@ mach_set_resolution(mach_t *mach, svga_t *svga)
                 }
             }
             svga_recalctimings(svga);
-        } else if (ATI_GRAPHICS_ULTRA)
-            svga_recalctimings(svga); /*locked shadow registers keep the CRT values, but the VGA/8514/A output switch still follows ADVFUNC_CNTL*/
+        } else if (ATI_GRAPHICS_ULTRA && !dev->on)
+            svga_recalctimings(svga); /*locked shadow registers keep the CRT values, but turning the 8514/A off still hands the screen back to VGA*/
     }
 }
 
