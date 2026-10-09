@@ -2176,6 +2176,9 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
         case 2: /*Rectangle fill (X direction)*/
         case 3: /*Rectangle fill (Y direction)*/
         case 4: /*Rectangle fill (Y direction using nibbles)*/
+            /*At the Graphics Ultra's 8514/A-compatible pitch X wraps modulo 1024 (ATI guide pp. 8-21, 8-22;
+              M8WRAP on the real card).*/
+            x_mask = dev->accel.x_wrap ? 0x3ff : -1;
             /* Graphics Ultra, command 3 (TEST.COM TS1 op 91 on the real card): the major axis runs DOWN
                each column (MAJ_AXIS_PCNT, less one with LAST_PIXEL off), then the next column, MIN_AXIS + 1
                columns. With CPU data each word carries two pixels in this mode. */
@@ -2495,7 +2498,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         break;
                                 }
 
-                                READ(dev->accel.dest + dev->accel.cx, dest_dat);
+                                READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
                                 if ((compare_mode == 0) ||
                                     ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -2510,24 +2513,24 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     if (dev->accel.cmd & 0x02) {
                                         if (dev->accel.cmd & 0x1000) {
                                             if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
-                                                WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                                WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                             } else if (!(dev->accel.cmd & 0x04)) {
-                                                WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                                WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                             }
                                         } else {
                                             if (dev->accel.x_count >= and3) {
                                                 if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
-                                                    WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                                    WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                                 } else if (!(dev->accel.cmd & 0x04)) {
-                                                    WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                                    WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                                 }
                                             }
                                         }
                                     } else {
                                         if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
-                                            WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                            WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                         } else if (!(dev->accel.cmd & 0x04)) {
-                                            WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                            WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                         }
                                     }
                                 }
@@ -2656,7 +2659,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         break;
                                 }
 
-                                READ(dev->accel.dest + dev->accel.cx, dest_dat);
+                                READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
                                 if ((compare_mode == 0) ||
                                     ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -2671,24 +2674,24 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     if (dev->accel.cmd & 0x02) {
                                         if (dev->accel.cmd & 0x1000) {
                                             if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
-                                                WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                                WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                             } else if (!(dev->accel.cmd & 0x04)) {
-                                                WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                                WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                             }
                                         } else {
                                             if (dev->accel.x_count >= and3) {
                                                 if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
-                                                    WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                                    WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                                 } else if (!(dev->accel.cmd & 0x04)) {
-                                                    WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                                    WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                                 }
                                             }
                                         }
                                     } else {
                                         if ((dev->accel.cmd & 0x04) && (dev->accel.sx || ATI_GRAPHICS_ULTRA)) { /*GU: the row is already one short*/
-                                            WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                            WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                         } else if (!(dev->accel.cmd & 0x04)) {
-                                            WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                            WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                         }
                                     }
                                 }
@@ -2780,7 +2783,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                             break;
                                     }
 
-                                    READ(dev->accel.dest + dev->accel.cx, dest_dat);
+                                    READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
                                     if ((compare_mode == 0) ||
                                         ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -2792,7 +2795,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         old_dest_dat = dest_dat;
                                         MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                         dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                        WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                        WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                     }
                                 }
 
@@ -2860,7 +2863,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                             break;
                                     }
 
-                                    READ(dev->accel.dest + dev->accel.cx, dest_dat);
+                                    READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
                                     if ((compare_mode == 0) ||
                                         ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -2872,7 +2875,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         old_dest_dat = dest_dat;
                                         MIX(mix_dat & 0x01, dest_dat, src_dat);
                                         dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                        WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                        WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                     }
                                 }
 
@@ -2948,7 +2951,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     int outline = type_b ? (wrt_mask & 0xff) : rd_mask_polygon;
                                     int boundary;
                                     int filled;
-                                    READ(dev->accel.dest + dev->accel.cx, dest_dat);
+                                    READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                     old_dest_dat = dest_dat;
                                     boundary = ((dest_dat & outline) == outline);
                                     filled   = boundary || dev->accel.fill_state;
@@ -2960,11 +2963,11 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         dest_dat &= ~rd_mask_polygon;
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                                 } else {
-                                    READ(dev->accel.dest + dev->accel.cx, poly_src);
+                                    READ(dev->accel.dest + (dev->accel.cx & x_mask), poly_src);
                                     if ((poly_src & rd_mask_polygon) == rd_mask_polygon)
                                         dev->accel.fill_state ^= 1;
 
-                                    READ(dev->accel.dest + dev->accel.cx, dest_dat);
+                                    READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
                                     old_dest_dat = dest_dat;
                                     if (dev->accel.fill_state) {
@@ -3004,7 +3007,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     ((compare_mode == 0x30) && (dest_dat <= compare)) ||
                                     ((compare_mode == 0x38) && (dest_dat > compare))) {
                                     ibm8514_log(dev->log,"Results c(%d,%d):rdmask=%02x, wrtmask=%02x, mix=%02x, destdat=%02x, nowrite=%d.\n", dev->accel.cx, dev->accel.cy, rd_mask_polygon, wrt_mask, mix_dat, dest_dat, dev->accel.cx_back);
-                                    WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                    WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                 }
                             } else
                                 ibm8514_log(dev->log,"Out of bounds DrawA C(%d,%d).\n", dev->accel.cx, dev->accel.cy);
@@ -3069,7 +3072,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         break;
                                 }
 
-                                READ(dev->accel.dest + dev->accel.cx, dest_dat);
+                                READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
                                 if ((compare_mode == 0) ||
                                     ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -3083,7 +3086,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
 
                                     if (dev->accel.cmd & 0x10) {
-                                        WRITE(dev->accel.dest + dev->accel.cx, dest_dat);
+                                        WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                     }
                                 }
                             } else
@@ -3401,6 +3404,9 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
         break;
 
         case 6: /*BitBlt*/
+            /*At the Graphics Ultra's 8514/A-compatible pitch X wraps modulo 1024, source and destination alike
+              (ATI guide pp. 8-21, 8-22; M8WRAP on the real card).*/
+            x_mask = dev->accel.x_wrap ? 0x3ff : -1;
             if (!cpu_input) /*!cpu_input is trigger to start operation*/
             {
                 dev->accel.x_count = 0;
@@ -3467,14 +3473,14 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                         (dev->accel.dy <= clip_b)) {
                         if (pixcntl == 3) {
                             if (!(dev->accel.cmd & 0x10) && ((frgd_mix != 3) || (bkgd_mix != 3))) {
-                                READ(dev->accel.src + dev->accel.cx, mix_dat);
+                                READ(dev->accel.src + (dev->accel.cx & x_mask), mix_dat);
                                 mix_dat = ((mix_dat & rd_mask) == rd_mask);
                                 if (dev->accel.cmd & 0x02)
                                     mix_dat = mix_dat ? 0x01 : 0x00;
                                 else
                                     mix_dat = mix_dat ? mix_mask : 0x00;
                             } else if (dev->accel.cmd & 0x10) {
-                                READ(dev->accel.src + dev->accel.cx, mix_dat);
+                                READ(dev->accel.src + (dev->accel.cx & x_mask), mix_dat);
                                 mix_dat = ((mix_dat & rd_mask) == rd_mask);
                                 if (dev->accel.cmd & 0x02)
                                     mix_dat = mix_dat ? 0x01 : 0x00;
@@ -3494,7 +3500,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 src_dat = cpu_dat;
                                 break;
                             case 3:
-                                READ(dev->accel.src + dev->accel.cx, src_dat);
+                                READ(dev->accel.src + (dev->accel.cx & x_mask), src_dat);
                                 if (pixcntl == 3) {
                                     if (dev->accel.cmd & 0x10)
                                         src_dat = ((src_dat & rd_mask) == rd_mask);
@@ -3505,7 +3511,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 break;
                         }
 
-                        READ(dev->accel.dest + dev->accel.dx, dest_dat);
+                        READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
                         if ((compare_mode == 0) ||
                             ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -3519,14 +3525,14 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
                             if (dev->accel.cmd & 0x02) {
                                 if (dev->accel.cmd & 0x1000) {
-                                    WRITE(dev->accel.dest + dev->accel.dx, dest_dat);
+                                    WRITE(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                                 } else {
                                     if (dev->accel.x_count >= and3_blt) {
-                                        WRITE(dev->accel.dest + dev->accel.dx, dest_dat);
+                                        WRITE(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                                     }
                                 }
                             } else {
-                                WRITE(dev->accel.dest + dev->accel.dx, dest_dat);
+                                WRITE(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                             }
                         }
                     }
@@ -3612,14 +3618,14 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         src_dat = 0;
                                         break;
                                     case 3:
-                                        READ(dev->accel.src + dev->accel.cx, src_dat);
+                                        READ(dev->accel.src + (dev->accel.cx & x_mask), src_dat);
                                         break;
 
                                     default:
                                         break;
                                 }
 
-                                READ(dev->accel.dest + dev->accel.dx, dest_dat);
+                                READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
                                 if ((compare_mode == 0) ||
                                     ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -3631,7 +3637,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                    WRITE(dev->accel.dest + dev->accel.dx, dest_dat);
+                                    WRITE(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                                 }
                             }
 
@@ -3702,14 +3708,14 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         src_dat = 0;
                                         break;
                                     case 3:
-                                        READ(dev->accel.src + dev->accel.cx, src_dat);
+                                        READ(dev->accel.src + (dev->accel.cx & x_mask), src_dat);
                                         break;
 
                                     default:
                                         break;
                                 }
 
-                                READ(dev->accel.dest + dev->accel.dx, dest_dat);
+                                READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
                                 if ((compare_mode == 0) ||
                                     ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -3721,7 +3727,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & 0x01, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                    WRITE(dev->accel.dest + dev->accel.dx, dest_dat);
+                                    WRITE(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                                 }
                             }
 
@@ -3786,12 +3792,12 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 (dx <= (((uint64_t)clip_r) * 3)) &&
                                 (dev->accel.dy >= (clip_t << 1)) &&
                                 (dev->accel.dy <= (clip_b << 1))) {
-                                READ(dev->accel.src + cx, src_dat);
-                                READ(dev->accel.dest + dx, dest_dat);
+                                READ(dev->accel.src + (cx & x_mask), src_dat);
+                                READ(dev->accel.dest + (dx & x_mask), dest_dat);
                                 old_dest_dat = dest_dat;
                                 MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                WRITE(dev->accel.dest + dx, dest_dat);
+                                WRITE(dev->accel.dest + (dx & x_mask), dest_dat);
                             }
 
                             cx++;
@@ -3811,11 +3817,11 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                 (dev->accel.dy <= clip_b)) {
                                 if (pixcntl == 3) {
                                     if (!(dev->accel.cmd & 0x10) && ((frgd_mix != 3) || (bkgd_mix != 3))) {
-                                        READ(dev->accel.src + dev->accel.cx, mix_dat);
+                                        READ(dev->accel.src + (dev->accel.cx & x_mask), mix_dat);
                                         mix_dat = ((mix_dat & rd_mask) == rd_mask);
                                         mix_dat = mix_dat ? mix_mask : 0;
                                     } else if (dev->accel.cmd & 0x10) {
-                                        READ(dev->accel.src + dev->accel.cx, mix_dat);
+                                        READ(dev->accel.src + (dev->accel.cx & x_mask), mix_dat);
                                         mix_dat = ((mix_dat & rd_mask) == rd_mask);
                                         mix_dat = mix_dat ? mix_mask : 0;
                                     }
@@ -3831,7 +3837,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         src_dat = 0;
                                         break;
                                     case 3:
-                                        READ(dev->accel.src + dev->accel.cx, src_dat);
+                                        READ(dev->accel.src + (dev->accel.cx & x_mask), src_dat);
                                         if (pixcntl == 3) {
                                             if ((dev->accel.cmd & 0x10) && !(dev->accel.cmd & 0x40))
                                                 src_dat = ((src_dat & rd_mask) == rd_mask);
@@ -3842,7 +3848,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                         break;
                                 }
 
-                                READ(dev->accel.dest + dev->accel.dx, dest_dat);
+                                READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
                                 if ((compare_mode == 0) ||
                                     ((compare_mode == 0x10) && (dest_dat >= compare)) ||
@@ -3854,7 +3860,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
-                                    WRITE(dev->accel.dest + dev->accel.dx, dest_dat);
+                                    WRITE(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                                 }
                             }
 

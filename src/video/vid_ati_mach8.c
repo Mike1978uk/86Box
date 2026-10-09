@@ -1010,6 +1010,9 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
             break;
 
         case 2: /*Non-conforming BitBLT from dest_y_end register (0xaeee)*/
+            /* At the Graphics Ultra's 8514/A-compatible pitch the destination X wraps modulo 1024 (ATI guide
+               pp. 8-21, 8-22; M8WRAP on the real card). */
+            x_mask = (ATI_GRAPHICS_ULTRA && mach->accel.compat_pitch) ? 0x3ff : -1;
             /* Graphics Ultra: whichever of DP_CONFIG and the 8514/A mix registers was
                written last chooses the source (M8ROW on the real card). */
             if (ATI_GRAPHICS_ULTRA && mach->accel.dp_compat) {
@@ -1427,12 +1430,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
 
                             if ((dev->accel_bpp == 24) && (mono_src == 1) && (frgd_sel == 5) && !mach->accel.mono_pattern_enable) {
                                 if (dev->accel.sy & 1) {
-                                    READ(dev->accel.dest + dev->accel.dx - mach->accel.dst_pitch, dest_dat);
+                                    READ(dev->accel.dest + (dev->accel.dx & x_mask) - mach->accel.dst_pitch, dest_dat);
                                 } else {
-                                    READ(dev->accel.dest + dev->accel.dx, dest_dat);
+                                    READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                                 }
                             } else {
-                                READ(dev->accel.dest + dev->accel.dx, dest_dat);
+                                READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                             }
 
                             switch (compare_mode) {
@@ -1516,12 +1519,12 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             if (mach->accel.dp_config & 0x10) {
                                 if ((dev->accel_bpp == 24) && (mono_src == 1) && (frgd_sel == 5) && !mach->accel.mono_pattern_enable) {
                                     if (dev->accel.sy & 1) {
-                                        WRITE(dev->accel.dest + dev->accel.dx - mach->accel.dst_pitch, dest_dat);
+                                        WRITE(dev->accel.dest + (dev->accel.dx & x_mask) - mach->accel.dst_pitch, dest_dat);
                                     } else {
-                                        WRITE(dev->accel.dest + dev->accel.dx, dest_dat);
+                                        WRITE(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                                     }
                                 } else {
-                                    WRITE(dev->accel.dest + dev->accel.dx, dest_dat);
+                                    WRITE(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
                                 }
                             }
                         }
