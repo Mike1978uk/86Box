@@ -4465,7 +4465,9 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
         static int      wlog = -1;
         if (wlog < 0)
             wlog = getenv("MACH8_WLOG") != NULL;
-        if (wlog)
+        /* Graphics Ultra writes are logged as the guest makes them, in mach_combo_accel_out_fifo:
+           here a CRT write to a hidden shadow set never arrives, and set replays would. */
+        if (wlog && !ATI_GRAPHICS_ULTRA)
             pclog("M8W %04X %04X %d\n", port, val, len);
         if (seq_on < 0)
             seq_on = getenv("MACH8_SEQ") != NULL;
@@ -9271,6 +9273,14 @@ mach_combo_accel_out_fifo(void *priv, uint16_t port, uint16_t val, int len)
     int        idx;
 
     mach_log(mach->log,"Accel OUT Combo=%04x, val=%04x, len=%d.\n", port, val, len);
+    {
+        /* DIAGNOSTIC, not for upstream: MACH8_WLOG, see mach_accel_out_fifo. */
+        static int wlog = -1;
+        if (wlog < 0)
+            wlog = getenv("MACH8_WLOG") != NULL;
+        if (wlog && ATI_GRAPHICS_ULTRA && !mach->crt_replay)
+            pclog("M8W %04X %04X %d\n", port, val, len);
+    }
     if (!ATI_GRAPHICS_ULTRA || mach->crt_replay) {
         mach_accel_out_fifo(mach, svga, dev, port, val, len);
         return;
