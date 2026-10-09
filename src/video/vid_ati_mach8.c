@@ -1583,6 +1583,11 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             dev->accel.dx--;
                     }
 
+                    /* Graphics Ultra (M8CONF test 28 on the real card): every row of a colour-pattern
+                       blit starts at PATT_INDEX, not where the previous row left off. */
+                    if (ATI_GRAPHICS_ULTRA && (mach->accel.patt_data_idx < 0x10))
+                        mach->accel.color_pattern_idx = mach->accel.patt_idx;
+
                     dst_row_width = ATI_GRAPHICS_ULTRA ? mach->accel.width : (mach->accel.width + (dst_wrap_row ? 1 : 0));
 
                     dev->accel.dy += mach->accel.stepy;
@@ -1653,7 +1658,16 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
 
                 /* Length and error term belong to the whole line; host-data calls continue it a word at a time. */
                 mach->accel.width = (dev->accel.dx > dev->accel.dy) ? (dev->accel.dx >> 1) : (dev->accel.dy >> 1);
-                if (dev->accel.dx > dev->accel.dy)
+                if (ATI_GRAPHICS_ULTRA) {
+                    /* The 8514/A Bresenham setup, as the guide gives it for ERR_TERM: 2*min - max, less 1
+                       when X increases (M8CONF tests 61 and 62 on the real card). */
+                    if (dev->accel.dx > dev->accel.dy)
+                        mach->accel.err = dev->accel.dy - (dev->accel.dx >> 1);
+                    else
+                        mach->accel.err = dev->accel.dx - (dev->accel.dy >> 1);
+                    if (mach->accel.cx_end_line > dev->accel.cx)
+                        mach->accel.err--;
+                } else if (dev->accel.dx > dev->accel.dy)
                     mach->accel.err = (dev->accel.dy - dev->accel.dx) >> 1;
                 else
                     mach->accel.err = (dev->accel.dx - dev->accel.dy) >> 1;
