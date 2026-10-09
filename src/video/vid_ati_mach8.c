@@ -4950,6 +4950,11 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                whatever DP_CONFIG happens to hold stale. */
             mach->accel.dp_compat = 1;
             mach->accel.src_reload = 1;
+            /* Graphics Ultra (M8LOPT on the real card): CMD and LINEDRAW_OPT share the line bits, so a CMD
+               write sets LINEDRAW_OPT's direction (7:5), DIR_TYPE (3) and LAST_PEL_OFF (2) from its own;
+               whichever register is written last decides. */
+            if (ATI_GRAPHICS_ULTRA)
+                mach->accel.linedraw_opt = (mach->accel.linedraw_opt & ~0xec) | (val & 0xec);
             ibm8514_accel_out_fifo(svga, port, val, len);
             break;
 
