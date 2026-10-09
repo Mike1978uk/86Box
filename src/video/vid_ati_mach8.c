@@ -6043,6 +6043,17 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
     }
 }
 
+/* The vertical read-backs (C2EEh, C6EEh, CAEEh) return the linear line count when DISP_CNTL
+   Y_CONTROL is 1 (SKIP_2): ((v >> 1) & 0xfffc) | (v & 3), as the guide gives it and as the card
+   reads. Other Y_CONTROL settings are not measured and return the register as written. */
+static uint16_t
+mach_crt_v_read(ibm8514_t *dev, uint16_t v)
+{
+    if (((dev->disp_cntl >> 1) & 0x03) == 0x01)
+        return ((v >> 1) & 0xfffc) | (v & 0x03);
+    return v;
+}
+
 static uint16_t
 mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, int len)
 {
@@ -6507,35 +6518,35 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
 
         case 0xc2ee:
             if (len == 2)
-                temp = dev->v_total_reg;
+                temp = mach_crt_v_read(dev, dev->v_total_reg);
             else
-                temp = dev->v_total_reg & 0xff;
+                temp = mach_crt_v_read(dev, dev->v_total_reg) & 0xff;
             break;
         case 0xc2ef:
             if (len == 1)
-                temp = dev->v_total_reg >> 8;
+                temp = mach_crt_v_read(dev, dev->v_total_reg) >> 8;
             break;
 
         case 0xc6ee:
             if (len == 2)
-                temp = dev->v_disp;
+                temp = mach_crt_v_read(dev, dev->v_disp);
             else
-                temp = dev->v_disp & 0xff;
+                temp = mach_crt_v_read(dev, dev->v_disp) & 0xff;
             break;
         case 0xc6ef:
             if (len == 1)
-                temp = dev->v_disp >> 8;
+                temp = mach_crt_v_read(dev, dev->v_disp) >> 8;
             break;
 
         case 0xcaee:
             if (len == 2)
-                temp = dev->v_sync_start;
+                temp = mach_crt_v_read(dev, dev->v_sync_start);
             else
-                temp = dev->v_sync_start & 0xff;
+                temp = mach_crt_v_read(dev, dev->v_sync_start) & 0xff;
             break;
         case 0xcaef:
             if (len == 1)
-                temp = dev->v_sync_start >> 8;
+                temp = mach_crt_v_read(dev, dev->v_sync_start) >> 8;
             break;
 
         case 0xceee:
