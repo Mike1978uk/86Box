@@ -9225,14 +9225,14 @@ mach_crt_pointer(mach_t *mach)
    V_SYNC_STRT, V_SYNC_WID bit 4; V_DISP bit 5. */
 static const uint8_t mach_crt_lock[8] = { 0x04, 0x08, 0x04, 0x04, 0x10, 0x20, 0x10, 0x10 };
 
-/* The set each register is displayed from. */
+/* The set each register is displayed from, for a given ADVFUNC_CNTL and CLOCK_SEL. */
 static void
-mach_crt_sources(mach_t *mach, ibm8514_t *dev, uint8_t *src)
+mach_crt_sources(mach_t *mach, uint16_t advfunc, uint16_t clock_sel, uint8_t *src)
 {
-    int mode = (dev->accel.advfunc_cntl & 0x04) ? 2 : 1;
+    int mode = (advfunc & 0x04) ? 2 : 1;
 
     for (int i = 0; i < 8; i++) {
-        if (mach->accel.clock_sel & 0x01)
+        if (clock_sel & 0x01)
             src[i] = 0;
         else
             src[i] = (mach->crt_lock[mode] & mach_crt_lock[i]) ? mode : 0;
@@ -9287,7 +9287,7 @@ mach_combo_accel_out_fifo(void *priv, uint16_t port, uint16_t val, int len)
         } else
             mach->crt_sets[set][idx][port & 1] = val & 0xff;
         mach->crt_valid[set][idx] = 1;
-        mach_crt_sources(mach, dev, after);
+        mach_crt_sources(mach, dev->accel.advfunc_cntl, mach->accel.clock_sel, after);
         if (after[idx] != set)
             return;
         mach->shadow_cntl = 0;
@@ -9296,11 +9296,25 @@ mach_combo_accel_out_fifo(void *priv, uint16_t port, uint16_t val, int len)
         return;
     }
 
-    mach_crt_sources(mach, dev, before);
+    mach_crt_sources(mach, dev->accel.advfunc_cntl, mach->accel.clock_sel, before);
+
+    /* A mode change sizes the display from the CRT registers it finds, so load the set the new
+       mode shows before the write reaches ADVFUNC_CNTL or CLOCK_SEL. */
+    if (!(port & 1) && (((port & 0xfffe) == 0x4ae8) || ((port & 0xfffe) == 0x4aee))) {
+        if ((port & 0xfffe) == 0x4ae8)
+            mach_crt_sources(mach, val, mach->accel.clock_sel, after);
+        else
+            mach_crt_sources(mach, dev->accel.advfunc_cntl, val, after);
+        if (memcmp(before, after, sizeof(after))) {
+            mach_crt_load(mach, svga, dev, after);
+            memcpy(before, after, sizeof(after));
+        }
+    }
+
     mach_accel_out_fifo(mach, svga, dev, port, val, len);
     if ((port & 0xfffe) == 0x46ee)
         mach->crt_lock[mach_crt_pointer(mach)] = mach->shadow_cntl & 0x3f;
-    mach_crt_sources(mach, dev, after);
+    mach_crt_sources(mach, dev->accel.advfunc_cntl, mach->accel.clock_sel, after);
     if (memcmp(before, after, sizeof(after)))
         mach_crt_load(mach, svga, dev, after);
 }
