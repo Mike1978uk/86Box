@@ -2743,7 +2743,12 @@ mach_accel_out_pixtrans(svga_t *svga, mach_t *mach, ibm8514_t *dev, uint16_t val
         case 0x000: /*8-bit size*/
             if (mono_src == 2) {
                 if ((frgd_sel != 2) && (bkgd_sel != 2)) {
-                    if ((mach->accel.dp_config & 0x1000) && !swap) {
+                    if (ATI_GRAPHICS_ULTRA && !swap) {
+                        /* Graphics Ultra: 8-bit monochrome host data comes from D15:8 and LSB_FIRST is
+                           ignored (guide, DP_CONFIG). ATI's MACHW3.DRV loads its font this way (2051h,
+                           glyph bits in the high byte) and its text draws on the real card. */
+                        val >>= 8;
+                    } else if ((mach->accel.dp_config & 0x1000) && !swap) {
                         mach_log(mach->log,"8-bit bus size swap.\n");
                         val = (val >> 8) | (val << 8);
                     }
