@@ -85,6 +85,7 @@ typedef struct mach_t {
     uint8_t  crt_sets[3][8][2]; /* Graphics Ultra CRT sets: primary, 640, 1024; 02E8h-1EE8h, low/high */
     uint8_t  crt_valid[3][8];
     uint8_t  crt_lock[3];       /* SHADOW_CTL as last written with SHADOW_SET pointing at each set */
+    int      crt_show1;         /* a SHADOW_SET write shows set 1 until the next ADVFUNC_CNTL write */
     int      crt_replay;
     uint8_t overscan_col_8;
     uint8_t overscan_b_col_24;

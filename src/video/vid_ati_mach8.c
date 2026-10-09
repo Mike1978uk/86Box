@@ -9203,7 +9203,9 @@ ati8514_vblank_start(void *priv)
    set, written to the set SHADOW_SET points at. The display uses shadow set 1 in 640x480 and
    shadow set 2 in 1024x768 (ADVFUNC_CNTL bit 2), and for each register group takes the shadow
    value where that set's lock bit is set and the primary value where it is clear (the guide,
-   SHADOW_CTL note 1). ATI extended mode uses the primary set (inferred: the only set that mode
+   SHADOW_CTL note 1). A SHADOW_SET write shows set 1 until the next ADVFUNC_CNTL write, whatever
+   bit 2 says; the card's read-back does this, and the display is assumed to follow it. The primary
+   set powers up as zeros. ATI extended mode uses the primary set (inferred: the only set that mode
    can be programmed through). */
 static int
 mach_crt_index(uint16_t port)
@@ -9227,11 +9229,11 @@ mach_crt_pointer(mach_t *mach)
    V_SYNC_STRT, V_SYNC_WID bit 4; V_DISP bit 5. */
 static const uint8_t mach_crt_lock[8] = { 0x04, 0x08, 0x04, 0x04, 0x10, 0x20, 0x10, 0x10 };
 
-/* The set each register is displayed from, for a given ADVFUNC_CNTL and CLOCK_SEL. */
+/* The set each register is displayed from, for a given ADVFUNC_CNTL, CLOCK_SEL and set-1 override. */
 static void
-mach_crt_sources(mach_t *mach, uint16_t advfunc, uint16_t clock_sel, uint8_t *src)
+mach_crt_sources(mach_t *mach, uint16_t advfunc, uint16_t clock_sel, int show1, uint8_t *src)
 {
-    int mode = (advfunc & 0x04) ? 2 : 1;
+    int mode = (!show1 && (advfunc & 0x04)) ? 2 : 1;
 
     for (int i = 0; i < 8; i++) {
         if (clock_sel & 0x01)
@@ -9297,7 +9299,7 @@ mach_combo_accel_out_fifo(void *priv, uint16_t port, uint16_t val, int len)
         } else
             mach->crt_sets[set][idx][port & 1] = val & 0xff;
         mach->crt_valid[set][idx] = 1;
-        mach_crt_sources(mach, dev->accel.advfunc_cntl, mach->accel.clock_sel, after);
+        mach_crt_sources(mach, dev->accel.advfunc_cntl, mach->accel.clock_sel, mach->crt_show1, after);
         if (after[idx] != set)
             return;
         mach->shadow_cntl = 0;
@@ -9306,15 +9308,16 @@ mach_combo_accel_out_fifo(void *priv, uint16_t port, uint16_t val, int len)
         return;
     }
 
-    mach_crt_sources(mach, dev->accel.advfunc_cntl, mach->accel.clock_sel, before);
+    mach_crt_sources(mach, dev->accel.advfunc_cntl, mach->accel.clock_sel, mach->crt_show1, before);
 
     /* A mode change sizes the display from the CRT registers it finds, so load the set the new
        mode shows before the write reaches ADVFUNC_CNTL or CLOCK_SEL. */
     if (!(port & 1) && (((port & 0xfffe) == 0x4ae8) || ((port & 0xfffe) == 0x4aee))) {
-        if ((port & 0xfffe) == 0x4ae8)
-            mach_crt_sources(mach, val, mach->accel.clock_sel, after);
-        else
-            mach_crt_sources(mach, dev->accel.advfunc_cntl, val, after);
+        if ((port & 0xfffe) == 0x4ae8) {
+            mach->crt_show1 = 0;
+            mach_crt_sources(mach, val, mach->accel.clock_sel, 0, after);
+        } else
+            mach_crt_sources(mach, dev->accel.advfunc_cntl, val, mach->crt_show1, after);
         if (memcmp(before, after, sizeof(after))) {
             mach_crt_load(mach, svga, dev, after);
             memcpy(before, after, sizeof(after));
@@ -9324,7 +9327,9 @@ mach_combo_accel_out_fifo(void *priv, uint16_t port, uint16_t val, int len)
     mach_accel_out_fifo(mach, svga, dev, port, val, len);
     if ((port & 0xfffe) == 0x46ee)
         mach->crt_lock[mach_crt_pointer(mach)] = mach->shadow_cntl & 0x3f;
-    mach_crt_sources(mach, dev->accel.advfunc_cntl, mach->accel.clock_sel, after);
+    else if (!(port & 1) && ((port & 0xfffe) == 0x5aee))
+        mach->crt_show1 = 1;
+    mach_crt_sources(mach, dev->accel.advfunc_cntl, mach->accel.clock_sel, mach->crt_show1, after);
     if (memcmp(before, after, sizeof(after)))
         mach_crt_load(mach, svga, dev, after);
 }
@@ -9642,6 +9647,8 @@ mach8_init(const device_t *info)
     dev->vblank_start         = mach_combo_vblank_start;
 
     svga->adv_flags |= FLAG_PANNING_ATI;
+    for (int i = 0; i < 8; i++)
+        mach->crt_valid[0][i] = 1;
     *reset_state = *mach;
 
     return mach;
