@@ -6045,17 +6045,6 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
 static uint16_t mach_crt_readback(mach_t *mach, ibm8514_t *dev, uint16_t port, int len, int *handled);
 
-/* The vertical read-backs (C2EEh, C6EEh, CAEEh) return the linear line count when DISP_CNTL
-   Y_CONTROL is 1 (SKIP_2): ((v >> 1) & 0xfffc) | (v & 3), as the guide gives it and as the card
-   reads. Other Y_CONTROL settings are not measured and return the register as written. */
-static uint16_t
-mach_crt_v_read(ibm8514_t *dev, uint16_t v)
-{
-    if (((dev->disp_cntl >> 1) & 0x03) == 0x01)
-        return ((v >> 1) & 0xfffc) | (v & 0x03);
-    return v;
-}
-
 static uint16_t
 mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, int len)
 {
@@ -6526,35 +6515,35 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
 
         case 0xc2ee:
             if (len == 2)
-                temp = mach_crt_v_read(dev, dev->v_total_reg);
+                temp = dev->v_total_reg;
             else
-                temp = mach_crt_v_read(dev, dev->v_total_reg) & 0xff;
+                temp = dev->v_total_reg & 0xff;
             break;
         case 0xc2ef:
             if (len == 1)
-                temp = mach_crt_v_read(dev, dev->v_total_reg) >> 8;
+                temp = dev->v_total_reg >> 8;
             break;
 
         case 0xc6ee:
             if (len == 2)
-                temp = mach_crt_v_read(dev, dev->v_disp);
+                temp = dev->v_disp;
             else
-                temp = mach_crt_v_read(dev, dev->v_disp) & 0xff;
+                temp = dev->v_disp & 0xff;
             break;
         case 0xc6ef:
             if (len == 1)
-                temp = mach_crt_v_read(dev, dev->v_disp) >> 8;
+                temp = dev->v_disp >> 8;
             break;
 
         case 0xcaee:
             if (len == 2)
-                temp = mach_crt_v_read(dev, dev->v_sync_start);
+                temp = dev->v_sync_start;
             else
-                temp = mach_crt_v_read(dev, dev->v_sync_start) & 0xff;
+                temp = dev->v_sync_start & 0xff;
             break;
         case 0xcaef:
             if (len == 1)
-                temp = mach_crt_v_read(dev, dev->v_sync_start) >> 8;
+                temp = dev->v_sync_start >> 8;
             break;
 
         case 0xceee:
@@ -9226,8 +9215,9 @@ ati8514_vblank_start(void *priv)
    bit 2 says; the card's read-back does this, and the display is assumed to follow it. The primary
    set powers up as zeros. DISP_CNTL (22E8h) is in the sets too: Y_CONTROL follows lock bit 1 and
    double scan/interlace lock bit 0 (guide, SHADOW_CTL); the display-enable bits are not shadowed.
-   The CRT read-backs (B2EEh-CAEEh) return the shown set's values as written, the vertical ones
-   decoded as in mach_crt_v_read. ATI extended mode uses
+   The CRT read-backs (B2EEh-CAEEh) return the shown set's values as written; the vertical ones
+   return the linear line count when Y_CONTROL is 1 (SKIP_2), ((v >> 1) & 0xfffc) | (v & 3), as the
+   guide gives it and as the card reads. ATI extended mode uses
    the primary set (inferred: the only set that mode can be programmed through). */
 static int
 mach_crt_index(uint16_t port)
