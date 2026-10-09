@@ -9196,15 +9196,113 @@ ati8514_vblank_start(void *priv)
     mach_vblank_start(mach, svga);
 }
 
+/* Graphics Ultra CRT register sets, as measured on a 113-11504-002 card: a write to 02E8h-1EE8h
+   lands in the set SHADOW_SET points at, whatever the locks. SHADOW_CTL holds a lock mask per
+   set, written to the set SHADOW_SET points at. The display uses shadow set 1 in 640x480 and
+   shadow set 2 in 1024x768 (ADVFUNC_CNTL bit 2), and for each register group takes the shadow
+   value where that set's lock bit is set and the primary value where it is clear (the guide,
+   SHADOW_CTL note 1). ATI extended mode uses the primary set (inferred: the only set that mode
+   can be programmed through). */
+static int
+mach_crt_index(uint16_t port)
+{
+    uint16_t p = port & 0xfffe;
+
+    if ((p < 0x02e8) || (p > 0x1ee8) || ((p - 0x02e8) & 0x03ff))
+        return -1;
+    return (p - 0x02e8) >> 10;
+}
+
+static int
+mach_crt_pointer(mach_t *mach)
+{
+    int set = mach->shadow_set & 0x03;
+
+    return (set == 3) ? 0 : set;
+}
+
+/* Lock bit per register: H_TOTAL, H_SYNC_STRT, H_SYNC_WID bit 2; H_DISP bit 3; V_TOTAL,
+   V_SYNC_STRT, V_SYNC_WID bit 4; V_DISP bit 5. */
+static const uint8_t mach_crt_lock[8] = { 0x04, 0x08, 0x04, 0x04, 0x10, 0x20, 0x10, 0x10 };
+
+/* The set each register is displayed from. */
+static void
+mach_crt_sources(mach_t *mach, ibm8514_t *dev, uint8_t *src)
+{
+    int mode = (dev->accel.advfunc_cntl & 0x04) ? 2 : 1;
+
+    for (int i = 0; i < 8; i++) {
+        if (mach->accel.clock_sel & 0x01)
+            src[i] = 0;
+        else
+            src[i] = (mach->crt_lock[mode] & mach_crt_lock[i]) ? mode : 0;
+    }
+}
+
+static void
+mach_crt_load(mach_t *mach, svga_t *svga, ibm8514_t *dev, const uint8_t *src)
+{
+    uint16_t saved = mach->shadow_cntl;
+
+    mach->crt_replay = 1;
+    mach->shadow_cntl = 0;
+    for (int i = 0; i < 8; i++) {
+        int      set  = src[i];
+        uint16_t port = 0x02e8 + (i << 10);
+        if (!mach->crt_valid[set][i])
+            continue;
+        if ((i == 4) || (i == 5) || (i == 6))
+            mach_accel_out_fifo(mach, svga, dev, port, mach->crt_sets[set][i][0] | (mach->crt_sets[set][i][1] << 8), 2);
+        else
+            mach_accel_out_fifo(mach, svga, dev, port, mach->crt_sets[set][i][0], 1);
+    }
+    mach->shadow_cntl = saved;
+    mach->crt_replay = 0;
+}
+
 static void
 mach_combo_accel_out_fifo(void *priv, uint16_t port, uint16_t val, int len)
 {
     mach_t *mach = (mach_t *) priv;
     svga_t *svga = &mach->svga;
     ibm8514_t *dev = (ibm8514_t *) svga->dev8514;
+    uint8_t    before[8];
+    uint8_t    after[8];
+    int        idx;
 
     mach_log(mach->log,"Accel OUT Combo=%04x, val=%04x, len=%d.\n", port, val, len);
+    if (!ATI_GRAPHICS_ULTRA || mach->crt_replay) {
+        mach_accel_out_fifo(mach, svga, dev, port, val, len);
+        return;
+    }
+
+    idx = mach_crt_index(port);
+    if (idx >= 0) {
+        int      set   = mach_crt_pointer(mach);
+        uint16_t saved = mach->shadow_cntl;
+
+        if (len == 2) {
+            mach->crt_sets[set][idx][0] = val & 0xff;
+            mach->crt_sets[set][idx][1] = val >> 8;
+        } else
+            mach->crt_sets[set][idx][port & 1] = val & 0xff;
+        mach->crt_valid[set][idx] = 1;
+        mach_crt_sources(mach, dev, after);
+        if (after[idx] != set)
+            return;
+        mach->shadow_cntl = 0;
+        mach_accel_out_fifo(mach, svga, dev, port, val, len);
+        mach->shadow_cntl = saved;
+        return;
+    }
+
+    mach_crt_sources(mach, dev, before);
     mach_accel_out_fifo(mach, svga, dev, port, val, len);
+    if ((port & 0xfffe) == 0x46ee)
+        mach->crt_lock[mach_crt_pointer(mach)] = mach->shadow_cntl & 0x3f;
+    mach_crt_sources(mach, dev, after);
+    if (memcmp(before, after, sizeof(after)))
+        mach_crt_load(mach, svga, dev, after);
 }
 
 static void
