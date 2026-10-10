@@ -26,6 +26,7 @@
 #include <86box/86box.h>
 #include "cpu.h"
 #include <86box/device.h>
+#include <86box/mem.h>
 #include <86box/timer.h>
 #include <86box/cassette.h>
 #include <86box/dma.h>
@@ -1359,6 +1360,24 @@ pit_write(uint16_t addr, uint8_t val, void *priv)
             last = dev->counters[0].l;
             pclog("PITCH0 reload %u (%.3f ms) mode %d\n", last ? last : 65536,
                   (last ? last : 65536) * 1000.0 / 1193182.0, dev->counters[0].m);
+            /* Who asked: the writer's stack, and 16 code bytes at each dword that could be a
+               ring-0 return address, to match against the VxD files. */
+            if (last && (last != 0x10000) && (cpu_state.seg_cs.base == 0)) {
+                uint16_t abrt = cpu_state.abrt;
+                uint32_t sp   = cpu_state.seg_ss.base + cpu_state.regs[4].l;
+                pclog("PITCH0 caller EIP %08X ESP %08X\n", cpu_state.pc, sp);
+                for (int i = 0; i < 48; i++) {
+                    uint32_t v = readmemll(sp + i * 4);
+                    if ((v >= 0xC0000000) && (v < 0xC2000000)) {
+                        char hex[64];
+                        int  n = 0;
+                        for (int j = -8; j < 8; j++)
+                            n += sprintf(hex + n, "%02X", readmembl(v + j));
+                        pclog("PITCH0 stack+%03X %08X code[-8..+8] %s\n", i * 4, v, hex);
+                    }
+                }
+                cpu_state.abrt = abrt;
+            }
         }
     }
 }
