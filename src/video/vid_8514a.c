@@ -1174,6 +1174,27 @@ ibm8514_short_stroke_start(int count, int cpu_input, uint32_t mix_dat, uint32_t 
     ibm8514_accel_start(count, cpu_input, mix_dat, cpu_dat, svga, len);
 }
 
+/* PIX_CNTL colour compare: TRUE protects the destination pixel, and planes disabled in
+   WRT_MASK take no part in the compare (Richter and Smith p. 246, Mach32 guide 8-36/8-46;
+   M8CMP8 on a Graphics Ultra). */
+static int
+ibm8514_color_cmp(int mode, uint32_t dest, uint32_t cmp, uint32_t mask)
+{
+    dest &= mask;
+    cmp &= mask;
+
+    switch (mode) {
+        case 0x08: return 1;
+        case 0x10: return dest >= cmp;
+        case 0x18: return dest < cmp;
+        case 0x20: return dest != cmp;
+        case 0x28: return dest == cmp;
+        case 0x30: return dest <= cmp;
+        case 0x38: return dest > cmp;
+        default:   return 0;
+    }
+}
+
 /* Width of one rectangle row, less one: the loops count SX down to 0. On the Graphics Ultra
    LAST_PIXEL off (CMD bit 2) shortens every row by one pixel, and the CPU data with it
    (TEST.COM TS1 ops 85-87 on the real card). */
@@ -1456,13 +1477,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                             READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
 
-                            if ((compare_mode == 0) ||
-                                ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                ((compare_mode == 0x38) && (dest_dat > compare))) {
+                            if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                 old_dest_dat = dest_dat;
                                 MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -1558,13 +1573,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                             READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
 
-                            if ((compare_mode == 0) ||
-                                ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                ((compare_mode == 0x38) && (dest_dat > compare))) {
+                            if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                 old_dest_dat = dest_dat;
                                 MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -1853,13 +1862,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                             READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
 
-                            if ((compare_mode == 0) ||
-                                ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                ((compare_mode == 0x38) && (dest_dat > compare))) {
+                            if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                 old_dest_dat = dest_dat;
                                 MIX(mix_dat & ((dev->accel.cmd & 0x02) ? 0x01 : mix_mask), dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2004,13 +2007,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                             READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
 
-                            if ((compare_mode == 0) ||
-                                ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                ((compare_mode == 0x38) && (dest_dat > compare))) {
+                            if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                 old_dest_dat = dest_dat;
                                 MIX(mix_dat & 0x01, dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2100,13 +2097,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
 
-                                if ((compare_mode == 0) ||
-                                    ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                    ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                    ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                    ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                    ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                    ((compare_mode == 0x38) && (dest_dat > compare))) {
+                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2500,13 +2491,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
-                                if ((compare_mode == 0) ||
-                                    ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                    ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                    ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                    ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                    ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                    ((compare_mode == 0x38) && (dest_dat > compare))) {
+                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & ((dev->accel.cmd & 0x02) ? 0x01 : mix_mask), dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2661,13 +2646,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
-                                if ((compare_mode == 0) ||
-                                    ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                    ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                    ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                    ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                    ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                    ((compare_mode == 0x38) && (dest_dat > compare))) {
+                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & ((dev->accel.cmd & 0x02) ? 0x01 : mix_mask), dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2785,13 +2764,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                     READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
-                                    if ((compare_mode == 0) ||
-                                        ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                        ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                        ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                        ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                        ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                        ((compare_mode == 0x38) && (dest_dat > compare))) {
+                                    if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                         old_dest_dat = dest_dat;
                                         MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                         dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2865,13 +2838,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                     READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
-                                    if ((compare_mode == 0) ||
-                                        ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                        ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                        ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                        ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                        ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                        ((compare_mode == 0x38) && (dest_dat > compare))) {
+                                    if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                         old_dest_dat = dest_dat;
                                         MIX(mix_dat & 0x01, dest_dat, src_dat);
                                         dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2999,13 +2966,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 }
 
-                                if ((compare_mode == 0) ||
-                                    ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                    ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                    ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                    ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                    ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                    ((compare_mode == 0x38) && (dest_dat > compare))) {
+                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                     ibm8514_log(dev->log,"Results c(%d,%d):rdmask=%02x, wrtmask=%02x, mix=%02x, destdat=%02x, nowrite=%d.\n", dev->accel.cx, dev->accel.cy, rd_mask_polygon, wrt_mask, mix_dat, dest_dat, dev->accel.cx_back);
                                     WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                 }
@@ -3074,13 +3035,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
-                                if ((compare_mode == 0) ||
-                                    ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                    ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                    ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                    ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                    ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                    ((compare_mode == 0x38) && (dest_dat > compare))) {
+                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3204,13 +3159,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                         READ((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
 
-                        if ((compare_mode == 0) ||
-                            ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                            ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                            ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                            ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                            ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                            ((compare_mode == 0x38) && (dest_dat > compare))) {
+                        if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                             old_dest_dat = dest_dat;
                             MIX(mix_dat & mix_mask, dest_dat, src_dat);
                             dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3322,13 +3271,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                         READ((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
 
-                        if ((compare_mode == 0) ||
-                            ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                            ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                            ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                            ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                            ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                            ((compare_mode == 0x38) && (dest_dat > compare))) {
+                        if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                             old_dest_dat = dest_dat;
                             MIX(mix_dat & mix_mask, dest_dat, src_dat);
                             dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3513,13 +3456,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                         READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
-                        if ((compare_mode == 0) ||
-                            ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                            ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                            ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                            ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                            ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                            ((compare_mode == 0x38) && (dest_dat > compare))) {
+                        if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                             old_dest_dat = dest_dat;
                             MIX(mix_dat & ((dev->accel.cmd & 0x02) ? 0x01 : mix_mask), dest_dat, src_dat);
                             dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3627,13 +3564,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
-                                if ((compare_mode == 0) ||
-                                    ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                    ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                    ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                    ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                    ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                    ((compare_mode == 0x38) && (dest_dat > compare))) {
+                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3717,13 +3648,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
-                                if ((compare_mode == 0) ||
-                                    ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                    ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                    ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                    ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                    ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                    ((compare_mode == 0x38) && (dest_dat > compare))) {
+                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & 0x01, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3850,13 +3775,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
-                                if ((compare_mode == 0) ||
-                                    ((compare_mode == 0x10) && (dest_dat >= compare)) ||
-                                    ((compare_mode == 0x18) && (dest_dat < compare)) ||
-                                    ((compare_mode == 0x20) && (dest_dat != compare)) ||
-                                    ((compare_mode == 0x28) && (dest_dat == compare)) ||
-                                    ((compare_mode == 0x30) && (dest_dat <= compare)) ||
-                                    ((compare_mode == 0x38) && (dest_dat > compare))) {
+                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
