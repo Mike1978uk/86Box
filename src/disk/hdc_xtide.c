@@ -82,7 +82,9 @@
 #define JRIDE_SCRATCH_SIZE         0x3ee  // 1006 bytes
 
 #ifdef ENABLE_XTIDE_LOG
-uint8_t xtide_do_log = ENABLE_XTIDE_LOG;
+/* DIAGNOSTIC, not for upstream. Off unless XTIDE_TRACE=1: it logs a line per PIO byte, and the
+   XT-CF's 8-bit data register makes that hundreds of MB per boot. */
+uint8_t xtide_do_log = 0;
 
 static void
 xtide_log(void *priv, const char *fmt, ...)
@@ -231,6 +233,11 @@ xtide_init(const device_t *info)
 
 #ifdef ENABLE_XTIDE_LOG
     xtide->log = log_open("XTIDE");
+    {
+        const char *t = getenv("XTIDE_TRACE");
+        xtide_do_log = (t && *t && *t != '0') ? 1 : 0;
+        pclog("XTIDE: access trace %s (XTIDE_TRACE=%s)\n", xtide_do_log ? "ON" : "off", t ? t : "unset");
+    }
 #endif
 
     rom_init(&xtide->bios_rom,
