@@ -7169,7 +7169,6 @@ m8t(const char *dir, uint16_t port, uint16_t val, int len)
     switch (port & ~1) {
         case 0x9ae8: case 0x42e8: case 0xe2e8: case 0xa6e8: case 0xbae8:
         case 0x9aee: case 0xdaee: case 0xdeee: case 0xe2ee: case 0xe6ee:
-        case 0xcaee: case 0x86e8: case 0x82e8: case 0x8ae8: case 0x8ee8: case 0x96e8: case 0xbee8:
             if (m8t_left > 0) {
                 pclog("[M8T] %s%d %04x=%04x\n", dir, len, port, val);
                 m8t_left--;
@@ -7252,26 +7251,6 @@ mach_accel_outw(uint16_t port, uint16_t val, void *priv)
     /*DIAGNOSTIC: Test Sequence 1 starts with scissor top = -2; log its PIX_TRANS reads.*/
     if ((port == 0xbee8) && (val == 0x17fe) && dev->on)
         m8r_left = 64;
-    /*DIAGNOSTIC: arm on the RAM Addressing stage's first SCAN_TO_X, dump its corner pixels when it switches to the fold.*/
-    if ((port == 0xcaee) && (m8t_left <= 0) && dev->on)
-        m8t_left = 20000;
-    if ((port == 0xbae8) && (val == 0x73) && dev->on) {
-        static const int cx[4] = { 0, 0x154, 0x2a8, 0x3fc }, cy[4] = { 0, 0x155, 0x2aa, 0x3ff };
-        for (int k = 0; k < 4; k++) {
-            uint32_t a = ((uint32_t) cy[k] * 1024 + cx[k]) & dev->vram_mask;
-            pclog("[M8A] spot %d (%03x,%03x) @%06x: %02x %02x %02x %02x %02x %02x\n", k, cx[k], cy[k], a,
-                  dev->vram[a], dev->vram[(a + 1) & dev->vram_mask], dev->vram[(a + 2) & dev->vram_mask],
-                  dev->vram[(a + 3) & dev->vram_mask], dev->vram[(a + 4) & dev->vram_mask], dev->vram[(a + 5) & dev->vram_mask]);
-        }
-        pclog("[M8A] pitch=%d mask=%08x\n", dev->pitch, dev->vram_mask);
-    }
-    if ((port == 0x9ae8) && (val == 0x43f0) && (m8t_left > 0) && dev->on) {
-        for (int r = 0; r < 8; r++) {
-            uint32_t a = (uint32_t) r * 1024;
-            pclog("[M8A] row %d: %02x %02x %02x %02x %02x %02x %02x %02x\n", r, dev->vram[a], dev->vram[a + 1], dev->vram[a + 2],
-                  dev->vram[a + 3], dev->vram[a + 4], dev->vram[a + 5], dev->vram[a + 6], dev->vram[a + 7]);
-        }
-    }
     m8t("OUT", port, val, 2);
     if ((m8t_left > 0) && (port == 0xbee8) && ((val >> 12) >= 1) && ((val >> 12) <= 4))
         pclog("[M8C] scissor %04x\n", val);
