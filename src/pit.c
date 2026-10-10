@@ -1351,6 +1351,20 @@ pit_write(uint16_t addr, uint8_t val, void *priv)
         default:
             break;
     }
+
+    /* DIAGNOSTIC, not for upstream (#45): log channel 0's reload value whenever it changes, to
+       see the timer tick Windows runs at. Off unless PIT_CH0_LOG is set. */
+    {
+        static int      on = -1;
+        static uint32_t last = 0xffffffff;
+        if (on < 0)
+            on = getenv("PIT_CH0_LOG") != NULL;
+        if (on && ((addr & 3) == 0) && (dev->counters[0].l != last)) {
+            last = dev->counters[0].l;
+            pclog("PITCH0 reload %u (%.3f ms) mode %d\n", last ? last : 65536,
+                  (last ? last : 65536) * 1000.0 / 1193182.0, dev->counters[0].m);
+        }
+    }
 }
 
 extern uint8_t *ram;
