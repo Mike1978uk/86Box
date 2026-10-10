@@ -4914,6 +4914,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
         case 0x86e8:
             ibm8514_accel_out_fifo(svga, port, val, len);
             mach_log(mach->log,"DSTX=%04x, len=%d.\n", val & 0x07ff, len);
+            mach->accel.scan_fill_flag = 0;
             break;
 
         case 0x8ae8:
@@ -5885,6 +5886,16 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 }
 
                 mach_log(mach->log,"ScanToX=%04x, mono_src=%d, bkgd_sel=%d, frgd_sel=%d, pixread=%x.\n", mach->accel.dp_config, mono_src, bkgd_sel, frgd_sel, mach_pixel_read(mach));
+                /* Graphics Ultra (M8PF on the real card; guide 9-61): a CUR_X write clears the fill
+                   flag and each SCAN_TO_X toggles it. With the flag clear it draws; with it set it
+                   only moves CUR_X there, so an edge list is one write per edge. */
+                if (ATI_GRAPHICS_ULTRA && mach->accel.scan_fill_flag) {
+                    mach->accel.scan_fill_flag = 0;
+                    dev->accel.cur_x           = mach->accel.scan_to_x;
+                    dev->accel.cmd_back        = 1;
+                    break;
+                }
+                mach->accel.scan_fill_flag = 1;
                 mach_accel_start(mach->accel.cmd_type, 0, -1, -1, 0, svga, mach, dev);
             }
             break;

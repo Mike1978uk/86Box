@@ -193,6 +193,7 @@ typedef struct mach_t {
         uint32_t crt_offset;
         uint32_t patt_len_reg;
         int      poly_fill;
+        int      scan_fill_flag;
         uint16_t dst_clr_cmp_mask;
         int      clip_overrun;
         int16_t  clip_x;
