@@ -9690,8 +9690,9 @@ mach8_init(const device_t *info)
         /* On the Graphics Ultra the boot ROM and EEPROM hang off the VGA chip, so the mach8's
            own straps report EEPROM_ENA and ROM_ENA clear. CONFIG_STATUS_2: HIRES_BOOT and
            EPROM_16_ENA set, WRITE_PER_BIT and FLASH_ENA clear; bit 6 is reserved and reads set.
-           Values read from a 113-11504-002 card, 1 MB VRAM, in an 8-bit slot. */
-        mach->config1 = 0x01;
+           Values read from a 113-11504-002 card, 1 MB VRAM, in an 8-bit slot. ROM_LOCATION
+           (bits 15:9) reads all ones, ROM_PAGE_ENA (bit 8) clear: CONFIG_STATUS_1 = FE21. */
+        mach->config1 = 0xfe01;
         if (dev->vram_amount == 1024)
             mach->config1 |= 0x20;
 
