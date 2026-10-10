@@ -1195,6 +1195,23 @@ ibm8514_color_cmp(int mode, uint32_t dest, uint32_t cmp, uint32_t mask)
     }
 }
 
+/* Graphics Ultra (M8CMP, M8CMPA, M8CMPC on the real card): DEST_CMP_FN also gates 8514/A commands,
+   and a pixel is kept if either compare is TRUE. Codes 08h-38h compare with COLOR_CMP as above; in
+   8 bpp codes 40h-78h are a nibble test (bit 4 low or high nibble, "0 or F", bit 3 the side kept)
+   that ignores WRT_MASK. */
+static int
+ibm8514_pixel_kept(ibm8514_t *dev, uint16_t ati_fn, int mode, uint32_t dest, uint32_t cmp, uint32_t mask)
+{
+    if (ibm8514_color_cmp(mode, dest, cmp, mask))
+        return 1;
+    if ((ati_fn & 0x40) && !dev->bpp) {
+        int nib  = (ati_fn & 0x10) ? (dest & 0x0f) : ((dest >> 4) & 0x0f);
+        int edge = (nib == 0x00) || (nib == 0x0f);
+        return (ati_fn & 0x08) ? edge : !edge;
+    }
+    return ibm8514_color_cmp(ati_fn & 0x38, dest, cmp, mask);
+}
+
 /* Width of one rectangle row, less one: the loops count SX down to 0. On the Graphics Ultra
    LAST_PIXEL off (CMD bit 2) shortens every row by one pixel, and the CPU data with it
    (TEST.COM TS1 ops 85-87 on the real card). */
@@ -1229,6 +1246,9 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
     uint16_t   mix_mask        = dev->bpp ? 0x8000 : 0x80;
     uint16_t   compare         = dev->accel.color_cmp;
     int        compare_mode    = dev->accel.multifunc[0x0a] & 0x38;
+    /* The Mach8 state is svga->ext8514 on the 8514/A add-on and the SVGA's own priv on the Graphics Ultra. */
+    mach_t    *ati_mach        = ATI_GRAPHICS_ULTRA ? (mach_t *) (svga->ext8514 ? svga->ext8514 : svga->priv) : NULL;
+    uint16_t   ati_cmp_fn      = ati_mach ? ati_mach->accel.dest_cmp_fn : 0;
     int        cmd             = dev->accel.cmd >> 13;
     uint16_t   wrt_mask        = dev->accel.wrt_mask;
     uint16_t   rd_mask         = dev->accel.rd_mask;
@@ -1477,7 +1497,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                             READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
 
-                            if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                            if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                 old_dest_dat = dest_dat;
                                 MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -1573,7 +1593,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                             READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & 0x7ff), dest_dat);
 
-                            if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                            if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                 old_dest_dat = dest_dat;
                                 MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -1862,7 +1882,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                             READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
 
-                            if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                            if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                 old_dest_dat = dest_dat;
                                 MIX(mix_dat & ((dev->accel.cmd & 0x02) ? 0x01 : mix_mask), dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2007,7 +2027,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                             READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
 
-                            if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                            if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                 old_dest_dat = dest_dat;
                                 MIX(mix_dat & 0x01, dest_dat, src_dat);
                                 dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2097,7 +2117,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ((dev->accel.cy * dev->pitch) + (dev->accel.cx & x_mask), dest_dat);
 
-                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                                if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2491,7 +2511,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
-                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                                if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & ((dev->accel.cmd & 0x02) ? 0x01 : mix_mask), dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2646,7 +2666,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
-                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                                if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & ((dev->accel.cmd & 0x02) ? 0x01 : mix_mask), dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2764,7 +2784,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                     READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
-                                    if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                                    if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                         old_dest_dat = dest_dat;
                                         MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                         dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2838,7 +2858,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                     READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
-                                    if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                                    if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                         old_dest_dat = dest_dat;
                                         MIX(mix_dat & 0x01, dest_dat, src_dat);
                                         dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -2966,7 +2986,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 }
 
-                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                                if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                     ibm8514_log(dev->log,"Results c(%d,%d):rdmask=%02x, wrtmask=%02x, mix=%02x, destdat=%02x, nowrite=%d.\n", dev->accel.cx, dev->accel.cy, rd_mask_polygon, wrt_mask, mix_dat, dest_dat, dev->accel.cx_back);
                                     WRITE(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
                                 }
@@ -3035,7 +3055,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.cx & x_mask), dest_dat);
 
-                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                                if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3159,7 +3179,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                         READ((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
 
-                        if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                        if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                             old_dest_dat = dest_dat;
                             MIX(mix_dat & mix_mask, dest_dat, src_dat);
                             dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3271,7 +3291,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                         READ((dev->accel.cy * dev->pitch) + dev->accel.cx, dest_dat);
 
-                        if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                        if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                             old_dest_dat = dest_dat;
                             MIX(mix_dat & mix_mask, dest_dat, src_dat);
                             dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3456,7 +3476,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                         READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
-                        if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                        if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                             old_dest_dat = dest_dat;
                             MIX(mix_dat & ((dev->accel.cmd & 0x02) ? 0x01 : mix_mask), dest_dat, src_dat);
                             dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3564,7 +3584,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
-                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                                if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3648,7 +3668,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
-                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                                if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & 0x01, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
@@ -3775,7 +3795,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
 
                                 READ(dev->accel.dest + (dev->accel.dx & x_mask), dest_dat);
 
-                                if (!ibm8514_color_cmp(compare_mode, dest_dat, compare, wrt_mask)) {
+                                if (!ibm8514_pixel_kept(dev, ati_cmp_fn, compare_mode, dest_dat, compare, wrt_mask)) {
                                     old_dest_dat = dest_dat;
                                     MIX(mix_dat & mix_mask, dest_dat, src_dat);
                                     dest_dat = (dest_dat & wrt_mask) | (old_dest_dat & ~wrt_mask);
