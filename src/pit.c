@@ -1353,6 +1353,22 @@ pit_write(uint16_t addr, uint8_t val, void *priv)
             break;
     }
 
+    /* DIAGNOSTIC, not for upstream: log channel 1 (DRAM refresh) and channel 2 (speaker) reloads
+       and who wrote them, to see whether Windows undoes a slower refresh or uses channel 2.
+       Same switch as channel 0. */
+    {
+        static int      on = -1;
+        static uint32_t last[3] = { 0xffffffff, 0xffffffff, 0xffffffff };
+        int             ch = addr & 3;
+        if (on < 0)
+            on = getenv("PIT_CH0_LOG") != NULL;
+        if (on && ((ch == 1) || (ch == 2)) && (dev->counters[ch].l != last[ch])) {
+            last[ch] = dev->counters[ch].l;
+            pclog("PITCH%d reload %u mode %d by %08X\n", ch, last[ch] ? last[ch] : 65536,
+                  dev->counters[ch].m, cpu_state.seg_cs.base + cpu_state.pc);
+        }
+    }
+
     /* DIAGNOSTIC, not for upstream (#45): log channel 0's reload value whenever it changes, to
        see the timer tick Windows runs at. Off unless PIT_CH0_LOG is set. */
     {
