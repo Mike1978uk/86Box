@@ -6698,6 +6698,11 @@ mach_accel_in_call(uint16_t port, mach_t *mach, svga_t *svga, ibm8514_t *dev, in
                     if (dev->accel.advfunc_cntl & 0x04)
                         temp |= 0x02;
                 }
+                /* LINE_SYNC toggles every scanline, and the Graphics Ultra
+                   keeps it running with the 8514 side off, so follow
+                   whichever CRTC is driving the monitor. */
+                if ((dev->on ? dev->vc : svga->vc) & 1)
+                    temp |= 0x04;
             }
 
             {
