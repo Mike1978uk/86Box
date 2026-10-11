@@ -6175,8 +6175,10 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                 }
 
                 if (dev->data_available) {
-                    /* The flag drops with the last word the host takes, so the completion
-                       check comes before the bit is reported. */
+                    /* On the Graphics Ultra the flag drops with the last word the host
+                       takes, so the completion check comes before the bit is reported. */
+                    if (!ATI_GRAPHICS_ULTRA)
+                        temp |= 0x0100; /*Read Data available*/
                     if (mach->accel.cmd_type >= 0) {
                         switch (mach->accel.cmd_type) {
                             case 2:
@@ -6209,7 +6211,7 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                                 break;
                         }
                     }
-                    if (dev->data_available)
+                    if (ATI_GRAPHICS_ULTRA && dev->data_available)
                         temp |= 0x0100; /*Read Data available*/
                 }
             }
@@ -6226,6 +6228,8 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                 dev->force_busy2 = 0;
 
                 if (dev->data_available2) {
+                    if (!ATI_GRAPHICS_ULTRA)
+                        temp |= 0x01; /*Read Data available*/
                     if (mach->accel.cmd_type >= 0) {
                         switch (mach->accel.cmd_type) {
                             case 2:
@@ -6256,7 +6260,7 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                                 break;
                         }
                     }
-                    if (dev->data_available2)
+                    if (ATI_GRAPHICS_ULTRA && dev->data_available2)
                         temp |= 0x01; /*Read Data available*/
                 }
             }
