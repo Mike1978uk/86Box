@@ -6370,8 +6370,18 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                                 nug |= 0x01; /*the card returns the reserved bit 0 set*/
                                 temp |= nug << (8 * g);
                             }
-                        } else
+                        } else {
                             READ_PIXTRANS_WORD(dev->accel.cx, 0)
+                            /* The Graphics Ultra reads a pixel outside the scissors as FFh. */
+                            if (ATI_GRAPHICS_ULTRA) {
+                                for (int b = 0; b < 2; b++) {
+                                    int px = dev->accel.cx + b;
+                                    if ((px < (int16_t) dev->accel.clip_left) || (px > (int16_t) dev->accel.clip_right) ||
+                                        (dev->accel.cy < (int16_t) dev->accel.clip_top) || (dev->accel.cy > (int16_t) dev->accel.clip_bottom))
+                                        temp |= 0xff << (8 * b);
+                                }
+                            }
+                        }
                         if (dev->subsys_stat & INT_VSY) {
                             dev->force_busy = 1;
                             dev->data_available = 1;
