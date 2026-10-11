@@ -43,10 +43,6 @@
 #include <86box/vid_ddc.h>
 #include <86box/vid_8514a.h>
 
-/* DIAGNOSTIC, not for upstream: the per-operation probe traces are silenced while
-   MACH8_COUNT tallies a whole Windows session. */
-static int m8_quiet = -1;
-#define M8TRACE ((m8_quiet < 0) ? (m8_quiet = (getenv("MACH8_COUNT") != NULL)) : m8_quiet) ? (void) 0 : pclog
 #include <86box/vid_xga.h>
 #include <86box/vid_svga.h>
 #include <86box/vid_svga_render.h>
@@ -84,64 +80,6 @@ static __inline void mach32_writew_linear(uint32_t addr, uint16_t val, mach_t *m
 static __inline void mach32_write_common(uint32_t addr, uint8_t val, int linear, mach_t *mach, svga_t *svga);
 
 static mach_t *reset_state = NULL;
-
-/* DIAGNOSTIC, not for upstream: with MACH8_COUNT=1, tally the distinct control-register
-   values and engine starts a guest driver uses; dumped to the log when the card closes. */
-#define M8U_SLOTS 8192
-static int      m8u_on = -1;
-static uint32_t m8u_port[0x10000];
-static uint64_t m8u_key[M8U_SLOTS];
-static uint32_t m8u_n[M8U_SLOTS];
-
-static int
-m8u_enabled(void)
-{
-    if (m8u_on < 0)
-        m8u_on = getenv("MACH8_COUNT") != NULL;
-    return m8u_on;
-}
-
-static void
-m8u_add(uint64_t key)
-{
-    uint32_t h = (uint32_t) ((key * 0x9e3779b97f4a7c15ULL) >> 51);
-
-    for (int i = 0; i < M8U_SLOTS; i++, h = (h + 1) & (M8U_SLOTS - 1)) {
-        if (m8u_n[h] && (m8u_key[h] == key)) {
-            m8u_n[h]++;
-            return;
-        }
-        if (!m8u_n[h]) {
-            m8u_key[h] = key;
-            m8u_n[h]   = 1;
-            return;
-        }
-    }
-}
-
-/* Key layout: bits 63:56 kind (1 = register write, 2 = extended engine start). */
-static void
-m8u_dump(void)
-{
-    if (m8u_on <= 0)
-        return;
-    pclog("M8USAGE begin\n");
-    for (int p = 0; p < 0x10000; p++)
-        if (m8u_port[p])
-            pclog("M8USAGE port %04X bytes %u\n", p, m8u_port[p]);
-    for (int i = 0; i < M8U_SLOTS; i++) {
-        if (!m8u_n[i])
-            continue;
-        uint64_t k = m8u_key[i];
-        if ((k >> 56) == 1)
-            pclog("M8USAGE reg %04X = %04X  n %u\n", (unsigned) ((k >> 16) & 0xffff), (unsigned) (k & 0xffff), m8u_n[i]);
-        else
-            pclog("M8USAGE ext cmd_type %u dp_config %04X fmix %02X bmix %02X cpu_input %u  n %u\n",
-                  (unsigned) ((k >> 40) & 0xff), (unsigned) ((k >> 24) & 0xffff), (unsigned) ((k >> 16) & 0xff),
-                  (unsigned) ((k >> 8) & 0xff), (unsigned) (k & 0xff), m8u_n[i]);
-    }
-    pclog("M8USAGE end\n");
-}
 
 #ifdef ENABLE_MACH_LOG
 int mach_do_log = ENABLE_MACH_LOG;
@@ -522,9 +460,6 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
         }
     }
 
-    if (m8u_enabled())
-        m8u_add((2ULL << 56) | ((uint64_t) (cmd_type & 0xff) << 40) | ((uint64_t) mach->accel.dp_config << 24)
-                | ((uint64_t) dev->accel.frgd_mix << 16) | ((uint64_t) dev->accel.bkgd_mix << 8) | (cpu_input ? 1 : 0));
 
     mach_log(mach->log, "cmd_type = %i, frgd_sel = %i, bkgd_sel = %i, mono_src = %i, dpconfig = %04x, cur_x = %d, cur_y = %d, cl = %d, cr = %d, ct = %d, cb = %d, accel_bpp = %d, pitch = %d, hicolbpp = %d, pattlen = %d, input = %d, count = %d, cpu_dat = %04x, mix_dat = %04x, linedraw opt=%04x.\n", cmd_type, frgd_sel, bkgd_sel, mono_src, mach->accel.dp_config, dev->accel.dx, dev->accel.dy, clip_l, clip_r, clip_t, clip_b, dev->accel_bpp, dev->pitch, dev->bpp, mach->accel.patt_len, cpu_input, count, cpu_dat & 0xffff, mix_dat & 0xffff, mach->accel.linedraw_opt);
 
@@ -1021,8 +956,6 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 mono_src = (dev->accel.multifunc[0x0a] >> 6) & 3;
             }
             if (!cpu_input) {
-                if (1) /*DIAGNOSTIC, not for upstream*/
-                    M8TRACE("[M8B] start cur=%d,%d dyend=%d dpc=%04x dpitch=%d doff=%d clip %d,%d-%d,%d compat=%d\n", dev->accel.cur_x, dev->accel.cur_y, mach->accel.dest_y_end, mach->accel.dp_config, mach->accel.dst_pitch, mach->accel.dst_ge_offset, clip_l, clip_t, clip_r, clip_b, mach->accel.dp_compat);
                 mach->accel.stepx = 0;
                 mach->accel.stepy = 0;
 
@@ -1624,8 +1557,6 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             return;
                         dev->accel.cur_x = dev->accel.dx;
                         dev->accel.cur_y = dev->accel.dy;
-                        if (dev->on) /*DIAGNOSTIC*/
-                            M8TRACE("[M8B] end cur=%d,%d\n", dev->accel.cur_x, dev->accel.cur_y);
                         return;
                     }
                 }
@@ -2301,11 +2232,6 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 scan_pitch  = mach->accel.dst_pitch;
                 scan_offset = mach->accel.dst_ge_offset;
             }
-            /*DIAGNOSTIC, not for upstream*/
-            if (dev->on && !cpu_input)
-                M8TRACE("[M8X] scan cur=%d,%d to=%d compat=%d dpc=%04x dp_compat=%d frgd_sel=%d bkgd_sel=%d mono=%d fmix=%02x cmd_back=%d pixw=%d pitch=%d off=%d dstp=%d\n",
-                      dev->accel.cur_x, dev->accel.cur_y, mach->accel.scan_to_x, compat_scan, mach->accel.dp_config, mach->accel.dp_compat,
-                      frgd_sel, bkgd_sel, mono_src, dev->accel.frgd_mix, dev->accel.cmd_back, mach_pixel_write(mach), scan_pitch, scan_offset, mach->accel.dst_pitch);
             if (!cpu_input) {
                 mach->accel.stepx = 0;
                 mach->accel.stepy = 0;
@@ -2548,11 +2474,6 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 dev->accel.temp_cnt = ATI_GRAPHICS_ULTRA ? 0 : 8; /*Graphics Ultra: pattern bit number*/
             }
 
-            /*DIAGNOSTIC, not for upstream*/
-            if (dev->on && !cpu_input)
-                M8TRACE("[M8Y] count=%d width=%d dx=%d dy=%d dest=%06x clip l=%d t=%d r=%d b=%d cmp=%d fc=%08x wm=%08x\n",
-                      count, mach->accel.width, dev->accel.dx, dev->accel.dy, dev->accel.dest, clip_l, clip_t, clip_r, clip_b,
-                      compare_mode, frgd_color, wrt_mask);
 
             while (count--) {
                 switch (mono_src) {
@@ -2748,7 +2669,6 @@ mach_accel_out_pixtrans(svga_t *svga, mach_t *mach, ibm8514_t *dev, uint16_t val
     frgd_sel = mach_frgd_sel(mach, dev);
     bkgd_sel = (mach->accel.dp_config >> 7) & 3;
     mono_src = (mach->accel.dp_config >> 5) & 3;
-    { static int m8e = 0; if (m8e < 40) { m8e++; pclog("[M8E] pixtrans val=%04x dpc=%04x cmdtype=%d cmd_back=%d cur=%d,%d dyend=%d\n", val, mach->accel.dp_config, mach->accel.cmd_type, dev->accel.cmd_back, dev->accel.cur_x, dev->accel.cur_y, mach->accel.dest_y_end); } } /*DIAGNOSTIC*/
 
     if ((mach->accel.dp_config & 0x04) && (mach->accel.cmd_type != 5)) {
         mach_log(mach->log,"Read Host Monochrome Data.\n");
@@ -4475,91 +4395,8 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
     int mono_src;
     int ret = 0x00;
 
-    /* DIAGNOSTIC, not for upstream: with MACH8_SEQ=1, log every accelerator write around the
-       first command-3 operations (the 64 writes before the first one, then the next 6000), so
-       a guest driver's exact sequence can be replayed on the real card. */
-    {
-        static int      seq_on = -1;
-        static uint32_t seq_ring[64];
-        static int      seq_head;
-        static int      seq_left = -1;
-        uint32_t        rec = ((uint32_t) port << 16) | val;
-        static int      wlog = -1;
-        if (wlog < 0)
-            wlog = getenv("MACH8_WLOG") != NULL;
-        /* Graphics Ultra writes are logged as the guest makes them, in mach_combo_accel_out_fifo:
-           here a CRT write to a hidden shadow set never arrives, and set replays would. */
-        if (wlog && !ATI_GRAPHICS_ULTRA)
-            pclog("M8W %04X %04X %d\n", port, val, len);
-        if (seq_on < 0)
-            seq_on = getenv("MACH8_SEQ") != NULL;
-        if (seq_on) {
-            if ((seq_left < 0) && (port == 0x9ae8) && (len == 2) && ((val >> 13) == 3)) {
-                for (int i = 0; i < 64; i++) {
-                    uint32_t r = seq_ring[(seq_head + i) & 63];
-                    if (r)
-                        pclog("M8SEQ pre %04X %04X\n", r >> 16, r & 0xffff);
-                }
-                seq_left = 6000;
-            }
-            if (seq_left > 0) {
-                pclog("M8SEQ %04X %04X %d\n", port, val, len);
-                if (--seq_left == 0)
-                    pclog("M8SEQ end\n");
-            } else if (seq_left < 0) {
-                seq_ring[seq_head] = rec;
-                seq_head           = (seq_head + 1) & 63;
-            }
-        }
-    }
 
-    if (m8u_enabled()) {
-        m8u_port[port] += len;
-        switch (port) {
-            case 0x9ae8: /*CMD*/
-            case 0xb6e8: /*BKGD_MIX*/
-            case 0xbae8: /*FRGD_MIX*/
-            case 0xceee: /*DP_CONFIG*/
-            case 0xa2ee: /*LINEDRAW_OPT*/
-            case 0xf2ee: /*DEST_CMP_FN*/
-            case 0x7aee: /*EXT_GE_CONFIG*/
-            case 0xd6ee: /*PATT_LENGTH*/
-            case 0x92ee:
-            case 0xeaee:
-                m8u_add((1ULL << 56) | ((uint64_t) port << 16) | (val & (len == 1 ? 0xff : 0xffff)));
-                break;
-            case 0xbee8: /*MULTIFUNC: only the non-coordinate indices*/
-                if (((val >> 12) & 0xf) >= 0xa)
-                    m8u_add((1ULL << 56) | ((uint64_t) port << 16) | val);
-                break;
-            default:
-                break;
-        }
-    }
 
-    /* DIAGNOSTIC, not for upstream (#41): MACH8_COUNT=1 tallies accelerator writes, so
-       pixel-transfer bytes (E2E8) can be compared with on-card blit commands (9AE8). */
-    {
-        static int      cnt_on = -1;
-        static uint32_t cnt_port[0x10000];
-        static uint32_t cnt_cmd[8];
-        static uint32_t cnt_total;
-        if (cnt_on < 0)
-            cnt_on = getenv("MACH8_COUNT") != NULL;
-        if (cnt_on) {
-            cnt_port[port] += len;
-            if ((port == 0x9ae8) && (len == 2))
-                cnt_cmd[(val >> 13) & 7]++;
-            if (++cnt_total % 1000000 == 0) {
-                pclog("MACH8COUNT %u writes: cmd nop %u line %u rect %u rect2 %u line2 %u -- %u blit %u pat %u\n",
-                      cnt_total, cnt_cmd[0], cnt_cmd[1], cnt_cmd[2], cnt_cmd[3], cnt_cmd[4], cnt_cmd[5],
-                      cnt_cmd[6], cnt_cmd[7]);
-                for (int p = 0; p < 0x10000; p++)
-                    if (cnt_port[p] >= 20000)
-                        pclog("MACH8COUNT   port %04X bytes %u\n", p, cnt_port[p]);
-            }
-        }
-    }
 
     if (port & 0x8000) {
         if ((port & 0x06) != 0x06) {
@@ -4873,9 +4710,6 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             }
             dev->mode = IBM_MODE;
             dev->on = dev->accel.advfunc_cntl & 0x01;
-            /* DIAGNOSTIC, not for upstream (#7): who hands the screen to the 8514 side. */
-            pclog("DIAG7 [%04X:%08X] 4AE8 advfunc=%02X on=%d hdisp=%d vdisp=%d\n",
-                  CS, cpu_state.pc, dev->accel.advfunc_cntl, dev->on, dev->hdisp, dev->vdisp);
             dev->vendor_mode = 0;
             if (ATI_MACH32) {
                 if (mach->regs[0xb0] & 0x20) {
@@ -5352,15 +5186,12 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             else {
                 WRITE8(port, mach->local_cntl, val);
             }
-            if (old_local_cntl != mach->local_cntl)
-                pclog("[M8F] [%04X:%04X] 32EE %04x -> %04x queued=%d\n", CS, cpu_state.pc, old_local_cntl, mach->local_cntl, mach->fifo_test_idx);
             if ((old_local_cntl & 0x10) && !(mach->local_cntl & 0x10)) {
                 int queued = mach->fifo_test_idx;
 
                 mach->fifo_test_idx = 0;
                 dev->fifo_idx       = 0;
                 for (int i = 0; i < queued; i++) {
-                    pclog("[M8F] replay %04x=%04x\n", mach->fifo_test_port[i], mach->fifo_test_data[i]);
                     dev->accel_out_fifo(mach, mach->fifo_test_port[i], mach->fifo_test_data[i], 2);
                 }
             }
@@ -5436,9 +5267,6 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
             dev->mode = ATI_MODE;
             dev->on = mach->accel.clock_sel & 0x01;
-            /* DIAGNOSTIC, not for upstream (#7). */
-            pclog("DIAG7 [%04X:%08X] 4AEE clock_sel=%04X on=%d hdisp=%d vdisp=%d\n",
-                  CS, cpu_state.pc, mach->accel.clock_sel, dev->on, dev->hdisp, dev->vdisp);
             dev->vendor_mode = 1;
             if (ATI_MACH32) {
                 if (mach->regs[0xb0] & 0x20) {
@@ -6391,13 +6219,6 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                             dev->data_available = 1;
                         }
 
-                        { /*DIAGNOSTIC, not for upstream: MACH8_RLOG=1 logs each 8514/A PIX_TRANS read with where it was taken.*/
-                            static int rl_on = -1;
-                            if (rl_on < 0)
-                                rl_on = getenv("MACH8_RLOG") != NULL;
-                            if (rl_on)
-                                pclog("M8R cmd=%04X x=%d y=%d val=%04X\n", dev->accel.cmd, dev->accel.cx, dev->accel.cy, temp);
-                        }
                         mach_log(mach->log,"%04X:%08X: Opcode=%d, Len=%d, port=0x%04x, input=%d, temp=0x%04x, fullcmd=0x%04x, crx=%d, cry=%d, frgdsel=%x, bkgdsel=%x, majaxispoint=%d.\n", CS, cpu_state.pc, cmd, len, port, dev->accel.input, temp, dev->accel.cmd, dev->accel.cx, dev->accel.cy, dev->accel.frgd_sel, dev->accel.bkgd_sel, dev->accel.maj_axis_pcnt);
 
                         if (blit_rd)
@@ -7178,26 +6999,6 @@ ati8514_accel_outl(uint16_t port, uint32_t val, void *priv)
     mach_log(mach->log,"OUTL port=%04x, val=%08x, fifo idx=%d.\n", port, val, dev->fifo_idx);
 }
 
-/*DIAGNOSTIC, not for upstream: trace TEST.COM's Video RAM stage, armed by its 006B mix write.*/
-static int m8t_left = -1;
-static int m8r_left = 0;
-
-static void
-m8t(const char *dir, uint16_t port, uint16_t val, int len)
-{
-    switch (port & ~1) {
-        case 0x9ae8: case 0x42e8: case 0xe2e8: case 0xa6e8: case 0xbae8:
-        case 0x9aee: case 0xdaee: case 0xdeee: case 0xe2ee: case 0xe6ee:
-            if (m8t_left > 0) {
-                pclog("[M8T] %s%d %04x=%04x\n", dir, len, port, val);
-                m8t_left--;
-            }
-            break;
-        default:
-            break;
-    }
-}
-
 /* With JU1 set for an 8-bit slot the card only sees byte cycles, low byte first. On the command
    FIFO side (ports 8000h and up) one latch shared by all ports holds a low byte until a high byte
    commits the word, so a split word acts as one 16-bit access and a lone low byte does nothing.
@@ -7245,7 +7046,6 @@ mach_accel_outb(uint16_t port, uint8_t val, void *priv)
             mach->fifo_test_idx = dev->fifo_idx;
         }
     }
-    m8t("OUT", port, val, 1);
     dev->accel_out_fifo(mach, port, val, 1);
     mach_log(mach->log, "%04X:%08X: OUTB port=%04x, val=%02x, fifo idx=%d.\n", CS, cpu_state.pc, port, val, dev->fifo_idx);
 }
@@ -7263,21 +7063,6 @@ mach_accel_outw(uint16_t port, uint16_t val, void *priv)
     if (port == 0xf6ee)
         port = 0x82e8;
 
-    if (mach->local_cntl & 0x10)
-        pclog("[M8W] [%04X:%04X] OUTW %04x=%04x fifo=%d test=%d\n", CS, cpu_state.pc, port, val, dev->fifo_idx, mach->fifo_test_idx);
-    if ((port == 0xbae8) && (val == 0x6b) && (m8t_left <= 0) && dev->on)
-        m8t_left = 3000;
-    /*DIAGNOSTIC: Test Sequence 1 starts with scissor top = -2; log its PIX_TRANS reads.*/
-    if ((port == 0xbee8) && (val == 0x17fe) && dev->on)
-        m8r_left = 64;
-    m8t("OUT", port, val, 2);
-    if ((m8t_left > 0) && (port == 0xbee8) && ((val >> 12) >= 1) && ((val >> 12) <= 4))
-        pclog("[M8C] scissor %04x\n", val);
-    if ((m8t_left > 0) && (port == 0x9ae8) && ((val == 0x43f0) || (val == 0x40f3)))
-        pclog("[M8S] cmd=%04x on=%d pitch=%d mask=%08x bpp=%d abpp=%d clip l=%d t=%d r=%d b=%d vram0=%02x %02x %02x %02x\n",
-              val, dev->on, dev->pitch, dev->vram_mask, dev->bpp, dev->accel_bpp,
-              dev->accel.clip_left, dev->accel.clip_top, dev->accel.clip_right, dev->accel.clip_bottom,
-              dev->vram[0], dev->vram[1], dev->vram[2], dev->vram[3]);
 
     if ((port & 0x8000) && (mach->local_cntl & 0x10)) {
         /*FIFO test mode: a write is only queued, for FIFO_TEST_DATA to read back.
@@ -7421,9 +7206,6 @@ mach_accel_inb(uint16_t port, void *priv)
     else
         temp = mach_accel_in(port, mach, 1);
 
-    if (mach->local_cntl & 0x10)
-        pclog("[M8W] [%04X:%04X] INB  %04x=%02x fifo=%d test=%d\n", CS, cpu_state.pc, port, temp, ((ibm8514_t *) svga->dev8514)->fifo_idx, mach->fifo_test_idx);
-    m8t("IN", port, temp, 1);
     mach_log(mach->log,"%04X:%08X: INB port=%04x, temp=%02x.\n", CS, cpu_state.pc, port, temp);
     return temp;
 }
@@ -7440,13 +7222,6 @@ mach_accel_inw(uint16_t port, void *priv)
     else
         temp = mach_accel_in(port, mach, 2);
 
-    if (mach->local_cntl & 0x10)
-        pclog("[M8W] [%04X:%04X] INW  %04x=%04x fifo=%d test=%d\n", CS, cpu_state.pc, port, temp, ((ibm8514_t *) svga->dev8514)->fifo_idx, mach->fifo_test_idx);
-    m8t("IN", port, temp, 2);
-    if ((port == 0xe2e8) && (m8r_left > 0)) {
-        pclog("[M8R] %04x\n", temp);
-        m8r_left--;
-    }
     mach_log(mach->log,"%04X:%08X: INW port=%04x, temp=%04x.\n", CS, cpu_state.pc, port, temp);
     return temp;
 }
@@ -9374,14 +9149,6 @@ mach_combo_accel_out_fifo(void *priv, uint16_t port, uint16_t val, int len)
     int        idx;
 
     mach_log(mach->log,"Accel OUT Combo=%04x, val=%04x, len=%d.\n", port, val, len);
-    {
-        /* DIAGNOSTIC, not for upstream: MACH8_WLOG, see mach_accel_out_fifo. */
-        static int wlog = -1;
-        if (wlog < 0)
-            wlog = getenv("MACH8_WLOG") != NULL;
-        if (wlog && ATI_GRAPHICS_ULTRA && !mach->crt_replay)
-            pclog("M8W %04X %04X %d\n", port, val, len);
-    }
     if (!ATI_GRAPHICS_ULTRA || mach->crt_replay) {
         mach_accel_out_fifo(mach, svga, dev, port, val, len);
         return;
@@ -9850,8 +9617,6 @@ mach_close(void *priv)
     mach_t    *mach = (mach_t *) priv;
     svga_t    *svga = &mach->svga;
     ibm8514_t *dev  = (ibm8514_t *) svga->dev8514;
-
-    m8u_dump();
 
     if (dev) {
         free(dev->vram);
