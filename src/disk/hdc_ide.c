@@ -1168,6 +1168,11 @@ ide_atapi_attach(ide_t *ide)
         ide->tf->atastat = 0;
 }
 
+/* DIAGNOSTIC (IDE_COMMIT_US): status reads while a commit hold is running. */
+static int commit_hold_active;
+static int commit_hold_reads;
+static int commit_hold_count;
+
 void
 ide_set_callback(ide_t *ide, double callback)
 {
@@ -1585,8 +1590,18 @@ ide_write_data(ide_t *ide, const uint16_t val)
                         ide->pending_delay += wait_time;
                         ide_callback(ide);
                     }
-                } else
-                    ide_set_callback(ide, wait_time);
+                } else {
+                    /* DIAGNOSTIC: IDE_COMMIT_US holds BSY after a write's last
+                       sector, as a CF card's flash commit does. */
+                    double      commit_us = 0.0;
+                    const char *env       = getenv("IDE_COMMIT_US");
+                    if (env && (ide->tf->secount == 1)) {
+                        commit_us          = atof(env);
+                        commit_hold_active = 1;
+                        commit_hold_reads  = 0;
+                    }
+                    ide_set_callback(ide, wait_time + commit_us);
+                }
             }
         }
     }
@@ -2268,6 +2283,9 @@ ide_status(ide_t *ide, UNUSED(ide_t *ide_other), UNUSED(int ch))
 {
     uint8_t ret;
 
+    if (commit_hold_active)
+        commit_hold_reads++;
+
     /* Absent and is master or both are absent. */
     if (ide->type == IDE_NONE) {
         /* Bit 7 pulled down, all other bits pulled up, per the spec. */
@@ -2519,6 +2537,11 @@ ide_callback(void *priv)
     uint8_t         err = 0x00;
 
     ide_log("ide_callback(%i): %02X\n", ide->channel, ide->command);
+
+    if (commit_hold_active) {
+        commit_hold_active = 0;
+        pclog("IDE commit hold %d: %d status reads\n", ++commit_hold_count, commit_hold_reads);
+    }
 
     switch (ide->command) {
         case WIN_SEEK ... 0x7f:
