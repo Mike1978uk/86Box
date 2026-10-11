@@ -2754,6 +2754,8 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                 } else {
                     if (pixcntl == 1) {
                         if (dev->accel.cmd & 0x40) {
+                            uint32_t patt_row_mix = mix_dat;
+patt_row:
                             count = (dev->accel.maj_axis_pcnt & 0x7ff) + 1;
                             dev->accel.temp_cnt = 8;
                             while (count-- && dev->accel.sy >= 0) {
@@ -2824,6 +2826,11 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                                     if (dev->accel.sy < 0) {
                                         dev->fifo_idx = 0;
                                         dev->accel.cmd_back = 1;
+                                    }
+                                    if (!cpu_input && (dev->accel.sy >= 0)) {
+                                        /* No CPU data paces this fill: go on to the next row. */
+                                        mix_dat = patt_row_mix;
+                                        goto patt_row;
                                     }
                                     return;
                                 }
