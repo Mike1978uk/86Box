@@ -310,7 +310,7 @@ ibm8514_accel_out_pixtrans(svga_t *svga, UNUSED(uint16_t port), uint32_t val, in
     int        cmd       = dev->accel.cmd >> 13;
 
     if (!dev->accel.cmd_back) {
-        /* Graphics Ultra (M8LINE on the real card): monochrome host data in pixel mode (CMD bit 1
+        /* Graphics Ultra (measured on a real card): monochrome host data in pixel mode (CMD bit 1
            clear) takes one byte per pixel and only bit 4 - (X mod 4) of it. 16-bit transfers give
            two bytes, low first when LSB_FIRST (bit 12) is set; 8-bit transfers use the low byte. */
         if (ATI_GRAPHICS_ULTRA && (len == 2) && (pixcntl == 2) && (frgd_mix != 2) && (bkgd_mix != 2) &&
@@ -335,7 +335,7 @@ ibm8514_accel_out_pixtrans(svga_t *svga, UNUSED(uint16_t port), uint32_t val, in
             return;
         }
 
-        /* Graphics Ultra (M8LINE, M8MONO on the real card): in planar mode (CMD bit 1 set) a 16-bit
+        /* Graphics Ultra (measured on a real card): in planar mode (CMD bit 1 set) a 16-bit
            rectangle takes one byte per aligned group of four pixels, bits 4 to 1, starting at bit
            4 - (X mod 4). A row ending inside a group drops the rest of that byte. */
         if (ATI_GRAPHICS_ULTRA && (len == 2) && (pixcntl == 2) && (frgd_mix != 2) && (bkgd_mix != 2) &&
@@ -611,7 +611,7 @@ ibm8514_accel_out_fifo(svga_t *svga, uint16_t port, uint32_t val, int len)
             break;
 
         /* The Bresenham steps and error term are 13-bit two's complement on the Mach8:
-           1FFEh is -2 (M8SEQ on a Graphics Ultra). Other chips keep 14 bits. */
+           1FFEh is -2 (measured on a Graphics Ultra). Other chips keep 14 bits. */
         case 0x8ae8:
             if (len == 2) {
                 dev->accel.desty       = val & 0x7ff;
@@ -1172,7 +1172,7 @@ ibm8514_short_stroke_start(int count, int cpu_input, uint32_t mix_dat, uint32_t 
 
 /* PIX_CNTL colour compare: TRUE protects the destination pixel, and planes disabled in
    WRT_MASK take no part in the compare (Richter and Smith p. 246, Mach32 guide 8-36/8-46;
-   M8CMP8 on a Graphics Ultra). */
+   measured on a Graphics Ultra). */
 static int
 ibm8514_color_cmp(int mode, uint32_t dest, uint32_t cmp, uint32_t mask)
 {
@@ -1191,7 +1191,7 @@ ibm8514_color_cmp(int mode, uint32_t dest, uint32_t cmp, uint32_t mask)
     }
 }
 
-/* Graphics Ultra (M8CMP, M8CMPA, M8CMPC on the real card): DEST_CMP_FN also gates 8514/A commands,
+/* Graphics Ultra (measured on a real card): DEST_CMP_FN also gates 8514/A commands,
    and a pixel is kept if either compare is TRUE. Codes 08h-38h compare with COLOR_CMP as above; in
    8 bpp codes 40h-78h are a nibble test (bit 4 low or high nibble, "0 or F", bit 3 the side kept)
    that ignores WRT_MASK. */
@@ -1210,7 +1210,7 @@ ibm8514_pixel_kept(ibm8514_t *dev, uint16_t ati_fn, int mode, uint32_t dest, uin
 
 /* Width of one rectangle row, less one: the loops count SX down to 0. On the Graphics Ultra
    LAST_PIXEL off (CMD bit 2) shortens every row by one pixel, and the CPU data with it
-   (TEST.COM TS1 ops 85-87 on the real card). */
+   (TEST.COM sequence 1 ops 85-87 on the real card). */
 static int
 ibm8514_rect_width(ibm8514_t *dev)
 {
@@ -1288,7 +1288,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
     }
 
     if (pixcntl == 1) {
-        /* Graphics Ultra (M8ROW3 on the real card) and Richter and Smith: PATTERN_L
+        /* Graphics Ultra (measured on a real card) and Richter and Smith: PATTERN_L
            (index 8) holds the LEFT four pixels of the eight, bit 4 leftmost. The
            mapping below takes index 9 first, so present the two the other way round. */
         uint16_t patt_l = dev->accel.multifunc[8];
@@ -1660,7 +1660,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
             break;
 
         /* On the Graphics Ultra a Bresenham line steps diagonally while the error term is not
-           negative (M8SEQ); the comparison with MAJ_AXIS_PCNT is kept for the other chips. */
+           negative (measured on a real card); the comparison with MAJ_AXIS_PCNT is kept for the other chips. */
         case 1: /*Draw line*/
             /*At the Graphics Ultra's 8514/A-compatible pitch X wraps modulo 1024 (ATI guide pp. 8-21, 8-22).*/
             x_mask = dev->accel.x_wrap ? 0x3ff : 0x7ff;
@@ -2178,12 +2178,12 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
         case 3: /*Rectangle fill (Y direction)*/
         case 4: /*Rectangle fill (Y direction using nibbles)*/
             /*At the Graphics Ultra's 8514/A-compatible pitch X wraps modulo 1024 (ATI guide pp. 8-21, 8-22;
-              M8WRAP on the real card).*/
+              measured on a real card).*/
             x_mask = dev->accel.x_wrap ? 0x3ff : -1;
-            /* Graphics Ultra, command 3 (TEST.COM TS1 op 91 on the real card): the major axis runs DOWN
+            /* Graphics Ultra, command 3 (TEST.COM sequence 1 op 91 on the real card): the major axis runs DOWN
                each column (MAJ_AXIS_PCNT, less one with LAST_PIXEL off), then the next column, MIN_AXIS + 1
                columns. With CPU data each word carries two pixels in this mode. */
-            /* Graphics Ultra, command 4 (M8NIB on the real card): the rectangle (MIN+1 wide, MAJ+1 tall,
+            /* Graphics Ultra, command 4 (measured on a real card): the rectangle (MIN+1 wide, MAJ+1 tall,
                LAST_PIXEL ignored) is cut into 4-pixel columns aligned to X mod 4. Each data byte fills one
                row of one column; the first column runs one way in Y, the next the other way. CMD bit 9
                (16-bit data) set: two bytes per word, MSB first unless bit 12 (LSB first) is set;
@@ -2577,7 +2577,7 @@ ibm8514_accel_start(int count, int cpu_input, uint32_t mix_dat, uint32_t cpu_dat
                             if (dev->accel.output2)
                                 dev->accel.sx += and3;
 
-                            /* Graphics Ultra (M8LINE on the real card): direction 0 draws rows in +X and steps up. */
+                            /* Graphics Ultra (measured on a real card): direction 0 draws rows in +X and steps up. */
                             if (ATI_GRAPHICS_ULTRA && !(dev->accel.cmd & 0xe0)) {
                                 dev->accel.cx -= (dev->accel.sx + 1);
                                 dev->accel.cy--;
@@ -2925,7 +2925,7 @@ patt_row:
                                 }
 
                                 if (ATI_GRAPHICS_ULTRA) {
-                                    /* Graphics Ultra (M8ROW3 on the real card): a pixel with every outline-mask bit set is a
+                                    /* Graphics Ultra (measured on a real card): a pixel with every outline-mask bit set is a
                                        boundary; it flips inside/outside and is always filled. Other pixels are filled
                                        while inside. Type A outlines on RD_MASK and every pixel then loses its RD_MASK
                                        planes; type B (PIX_CNTL bit 1) outlines on WRT_MASK and clears nothing. */
@@ -3103,7 +3103,7 @@ patt_row:
             }
             break;
 
-        /* Graphics Ultra, measured with M8PL2: a polygon-boundary line writes the last pixel of each
+        /* Graphics Ultra, measured on a real card: a polygon-boundary line writes the last pixel of each
            scan line it crosses, a horizontal radial one writes nothing, and X is clamped to the left
            scissor and rejected beyond the right one without moving the line. */
         case 5: /*Draw Polygon Boundary Line*/ {
@@ -3363,7 +3363,7 @@ patt_row:
 
         case 6: /*BitBlt*/
             /*At the Graphics Ultra's 8514/A-compatible pitch X wraps modulo 1024, source and destination alike
-              (ATI guide pp. 8-21, 8-22; M8WRAP on the real card).*/
+              (ATI guide pp. 8-21, 8-22; measured on a real card).*/
             x_mask = dev->accel.x_wrap ? 0x3ff : -1;
             if (!cpu_input) /*!cpu_input is trigger to start operation*/
             {

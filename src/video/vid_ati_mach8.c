@@ -339,14 +339,14 @@ mach_pixel_read(mach_t *mach)
     return 1;
 }
 
-/* Graphics Ultra (M8FG6-9 and TS1 ops 112-113 on the real card): DP_CONFIG foreground source 6,
+/* Graphics Ultra (measured on a real card; ATI TEST.COM sequence 1 ops 112-113): DP_CONFIG foreground source 6,
    which the Mach32 guide does not list, waits for host data like source 2, so everything that
    waits for host data treats it as source 2. Each host byte then picks a colour pattern byte; see
    mach_src6_byte(). */
 /* The pattern byte a source 6 pixel takes. DP_CONFIG bit 11 clear: ((byte & 7) << 2) | (x & 1),
-   whatever PATT_INDEX and PATT_LENGTH say (M8FG6-9). Bit 11 set: (byte >> 2) reproduces TEST.COM
-   op 112 but NOT M8FG6-9, where the data starts a few pixels late and a word is skipped - an
-   open question (docs/ati_test_com_notes.md). */
+   whatever PATT_INDEX and PATT_LENGTH say (measured on a real card). Bit 11 set: (byte >> 2) reproduces TEST.COM
+   op 112 but not every case measured on the card, where the data starts a few pixels late and a
+   word is skipped; that case is not modelled. */
 static uint8_t
 mach_src6_byte(mach_t *mach, uint8_t byte, int x)
 {
@@ -356,7 +356,7 @@ mach_src6_byte(mach_t *mach, uint8_t byte, int x)
     return mach->accel.color_pattern[((byte & 7) << 2) | (x & 1)];
 }
 
-/* Graphics Ultra (M8SRC4C-E and TS1 ops 145-148 on the real card): DP_CONFIG foreground source 4,
+/* Graphics Ultra (measured on a real card; ATI TEST.COM sequence 1 ops 145-148): DP_CONFIG foreground source 4,
    not in the Mach32 guide, gives destination pixel k of a row 11h times the number of source
    pixels 4k to 4k+3 whose read-mask bits are all set. Past the source row, k beyond a quarter of
    its width, each of the four reads as (k mod 16) x 11h. */
@@ -389,7 +389,7 @@ mach_frgd_sel(mach_t *mach, ibm8514_t *dev)
     return sel;
 }
 
-/* Graphics Ultra (M8ROW3 on the real card; Mach32 guide, PATT_DATA): a linear monochrome
+/* Graphics Ultra (measured on a real card; Mach32 guide, PATT_DATA): a linear monochrome
    pattern is PATT_LENGTH + 1 bits taken from PATT_DATA_10 onward, starting at PATT_INDEX and
    not aligned to the destination. Each 16-bit word gives its bits MSB first. */
 static int
@@ -444,7 +444,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
     }
 
     compare_mode = (mach->accel.dest_cmp_fn >> 3) & 7;
-    /* Graphics Ultra, 8 bpp, DEST_CMP_FN bit 6 (M8CMP on the real card): not a colour compare.
+    /* Graphics Ultra, 8 bpp, DEST_CMP_FN bit 6 (measured on a real card): not a colour compare.
        Bit 4 picks the nibble (0 high, 1 low), the test is "that nibble is 0 or F", and bit 3
        picks the side written: 0 writes those pixels, 1 the others. Bit 5 is ignored. */
     if (ATI_GRAPHICS_ULTRA && !dev->bpp && (mach->accel.dest_cmp_fn & 0x40))
@@ -563,7 +563,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             break;
                     }
 
-                    /* Graphics Ultra (M8ROW7 on the real card, before TS1 op 149; as M8PL2 for the 8514/A path): a
+                    /* Graphics Ultra (measured on a real card, before TEST.COM sequence 1 op 149, as on the 8514/A path): a
                        POLY_MODE line draws boundary pixels, X clamped to the left scissor without moving the
                        line and rejected beyond the right one. */
                     poly_line_x = dev->accel.dx;
@@ -946,10 +946,10 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
 
         case 2: /*Non-conforming BitBLT from dest_y_end register (0xaeee)*/
             /* At the Graphics Ultra's 8514/A-compatible pitch the destination X wraps modulo 1024 (ATI guide
-               pp. 8-21, 8-22; M8WRAP on the real card). */
+               pp. 8-21, 8-22; measured on a real card). */
             x_mask = (ATI_GRAPHICS_ULTRA && mach->accel.compat_pitch) ? 0x3ff : -1;
             /* Graphics Ultra: whichever of DP_CONFIG and the 8514/A mix registers was
-               written last chooses the source (M8ROW on the real card). */
+               written last chooses the source (measured on a real card). */
             if (ATI_GRAPHICS_ULTRA && mach->accel.dp_compat) {
                 frgd_sel = dev->accel.frgd_sel;
                 bkgd_sel = dev->accel.bkgd_sel;
@@ -1223,7 +1223,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
             uint16_t dst_row_width = mach->accel.width + (dst_wrap_row ? 1 : 0);
             uint16_t src_row_width = mach->accel.src_width + (src_wrap_row ? 1 : 0);
 
-            /* Graphics Ultra (M8ROW3 on the real card, TS1 op 115): DEST_X_END and SRC_X_END are not
+            /* Graphics Ultra (measured on a real card, TEST.COM sequence 1 op 115): DEST_X_END and SRC_X_END are not
                drawn or read even when the blit wraps; the first row runs from CUR_X (SRC_X) to the
                end, every later row from DEST_X_START (SRC_X_START). */
             if (ATI_GRAPHICS_ULTRA) {
@@ -1280,7 +1280,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             mix_dat <<= 1;
                         } else {
                             if (ATI_GRAPHICS_ULTRA && (mach->accel.dp_config & 0x200)) {
-                                /* Graphics Ultra (M8ROW6 on the real card, TS1 op 144): 16-bit monochrome
+                                /* Graphics Ultra (measured on a real card, TEST.COM sequence 1 op 144): 16-bit monochrome
                                    host data with LSB_FIRST clear is taken from bit 15 down. */
                                 mix = (mix_dat >> 15) & 0x01;
                                 mix_dat <<= 1;
@@ -1317,7 +1317,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                         }
 
                         if (mach->accel.poly_fill || !(mach->accel.dp_config & 0x02)) {
-                            /* Graphics Ultra (M8SRC4C on the real card): source 4 is always the foreground; the
+                            /* Graphics Ultra (measured on a real card): source 4 is always the foreground; the
                                monochrome source does not pick per pixel. */
                             if (ATI_GRAPHICS_ULTRA && (frgd_sel == 4) && !dev->bpp)
                                 mix = 1;
@@ -1348,7 +1348,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                                                   dev->accel.sx, src_row_width, rd_mask);
                                     break;
                                 case 7:
-                                    /* Graphics Ultra (M8ROW6 on the real card, TS1 ops 142-143): source 7, not in
+                                    /* Graphics Ultra (measured on a real card, TEST.COM sequence 1 ops 142-143): source 7, not in
                                        the Mach32 guide, is source 6 with the VRAM blit source in place of host
                                        data - each source byte picks a colour pattern byte. */
                                     if (ATI_GRAPHICS_ULTRA && !dev->bpp) {
@@ -1404,7 +1404,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                                     break;
                             }
 
-                            /* Graphics Ultra (M8SCMP on the real card; TEST.COM TS1 ops 133-140): 92EEh bits 3-5
+                            /* Graphics Ultra (measured on a real card; TEST.COM sequence 1 ops 133-140): 92EEh bits 3-5
                                are a compare function in DEST_CMP_FN's encoding, applied to the source pixel
                                against EAEEh. A true result writes the background source through the background
                                mix. An engine reset does not clear 92EEh. */
@@ -1519,7 +1519,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                             dev->accel.dx--;
                     }
 
-                    /* Graphics Ultra (M8CONF test 28 on the real card): every row of a colour-pattern
+                    /* Graphics Ultra (measured on a real card): every row of a colour-pattern
                        blit starts at PATT_INDEX, not where the previous row left off. */
                     if (ATI_GRAPHICS_ULTRA && (mach->accel.patt_data_idx < 0x10))
                         mach->accel.color_pattern_idx = mach->accel.patt_idx;
@@ -1566,7 +1566,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
         case 3: /*Direct Linedraw (Polyline) from linedraw indexes (0xfeee)*/
         case 4:
             /* 8514/A-compatible pitch (reset by 4AE8h or MEM_CNTL, left by a GE_PITCH write) plots X
-               modulo 1024 (ATI guide pp. 8-21, 8-22): TS2 sub-test 22 on the real card. */
+               modulo 1024 (ATI guide pp. 8-21, 8-22): TEST.COM sequence 2 sub-test 22 on the real card. */
             x_mask = (ATI_GRAPHICS_ULTRA && mach->accel.compat_pitch) ? 0x3ff : -1;
             if (!cpu_input) {
                 dev->accel.cx = dev->accel.cur_x;
@@ -1594,7 +1594,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 mach->accel.width = (dev->accel.dx > dev->accel.dy) ? (dev->accel.dx >> 1) : (dev->accel.dy >> 1);
                 if (ATI_GRAPHICS_ULTRA) {
                     /* The 8514/A Bresenham setup, as the guide gives it for ERR_TERM: 2*min - max, less 1
-                       when X increases (M8CONF tests 61 and 62 on the real card). */
+                       when X increases (measured on a real card). */
                     if (dev->accel.dx > dev->accel.dy)
                         mach->accel.err = dev->accel.dy - (dev->accel.dx >> 1);
                     else
@@ -1638,7 +1638,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
 
             {
                 int total = mach->accel.width;
-                /* Graphics Ultra (M8ROW3 on the real card, TS1 op 112): the line reaches its end point;
+                /* Graphics Ultra (measured on a real card, TEST.COM sequence 1 op 112): the line reaches its end point;
                    LINEDRAW_OPT bit 2 decides whether that pixel is written. */
                 if (ATI_GRAPHICS_ULTRA)
                     total++;
@@ -2217,7 +2217,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                0x78AE starts with CEEE), which has DRAW clear and would suppress
                every pixel. Take the data path, the pitch and the offset from the
                8514/A side whenever the extended one has no draw enabled. */
-            /* Graphics Ultra (M8SRC): only the order of the DP_CONFIG and FRGD_MIX writes decides. */
+            /* Graphics Ultra (measured on a real card): only the order of the DP_CONFIG and FRGD_MIX writes decides. */
             if (ATI_GRAPHICS_ULTRA)
                 compat_scan = mach->accel.dp_compat;
             else
@@ -2262,7 +2262,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                 } else {
                     mach->accel.stepx = 1;
                     mach->accel.width = 0;
-                    /* Graphics Ultra (TEST.COM TS1 on the real card): a SCAN_TO_X to the
+                    /* Graphics Ultra (TEST.COM sequence 1 on the real card): a SCAN_TO_X to the
                        current X draws nothing and leaves CUR_X where it is. */
                     if (ATI_GRAPHICS_ULTRA) {
                         dev->force_busy  = 0;
@@ -2644,7 +2644,7 @@ mach_accel_start(int cmd_type, int cpu_input, int count, uint32_t mix_dat, uint3
                     dev->force_busy2 = 0;
                     mach->force_busy = 0;
                     dev->accel.cmd_back = 1;
-                    /* Graphics Ultra (M8SRC, TEST.COM TS1): CUR_X ends one past the end pixel, so a
+                    /* Graphics Ultra (measured on a real card; ATI TEST.COM sequence 1): CUR_X ends one past the end pixel, so a
                        second SCAN_TO_X to the next column draws nothing. An empty draw leaves it. */
                     if (ATI_GRAPHICS_ULTRA)
                         dev->accel.cur_x = dev->accel.dx + mach->accel.stepx;
@@ -2706,7 +2706,7 @@ mach_accel_out_pixtrans(svga_t *svga, mach_t *mach, ibm8514_t *dev, uint16_t val
                 } else
                     mach_accel_start(mach->accel.cmd_type, 1, 2, -1, val | (val << 16), svga, mach, dev);
             } else {
-                /* Graphics Ultra (TS1 op 112 on the real card; Mach32 guide, DP_CONFIG bit 12): 16-bit
+                /* Graphics Ultra (TEST.COM sequence 1 op 112 on the real card; Mach32 guide, DP_CONFIG bit 12): 16-bit
                    colour data with LSB_FIRST clear gives its high byte first. */
                 if (ATI_GRAPHICS_ULTRA && !(mach->accel.dp_config & 0x1000))
                     val = ((val >> 8) | (val << 8)) & 0xffff;
@@ -4282,7 +4282,7 @@ mach32_recalctimings(svga_t *svga)
     svga->hoverride = 1;
 }
 
-/* Graphics Ultra (M8ROW3 on the real card): runs the short stroke in progress to its end, every
+/* Graphics Ultra (measured on a real card): runs the short stroke in progress to its end, every
    remaining pixel taking BYTE as its host data. */
 static void
 mach_ssv_drain(svga_t *svga, ibm8514_t *dev, uint8_t byte)
@@ -4298,7 +4298,7 @@ mach_ssv_drain(svga_t *svga, ibm8514_t *dev, uint8_t byte)
 
 /* Graphics Ultra LINEDRAW pre-clip (ATI guide p. 7-10 table, pp. 9-29 to 9-34, EXT_GE_STATUS p. 9-68).
    Device space is -512..1535. CLIP_FLAGS are the last point's outcodes, 1 = outside. Not in the guide,
-   fitted to TS2 sub-tests 25-71 on the real card (tools/m8seq/m8ts2_clip_fit.py): POINTS_OUTSIDE is
+   fitted to TEST.COM sequence 2 sub-tests 25-71 on the real card: POINTS_OUTSIDE is
    cleared by a start point; CLIP_INSIDE is set by an accepted line not wholly beyond one edge, cleared by
    a rejected line, a rejected start point or a bounds point, kept through an exception, and never set in
    CLIP_MODE 0; CLIP_MODE 0 drops a line with an endpoint outside device space. */
@@ -4440,7 +4440,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
     mach_log(mach->log, "[%04X:%08X]: Port FIFO OUT=%04x, val=%04x, len=%d.\n", CS, cpu_state.pc, port, val, len);
 
-    /* Graphics Ultra (M8ROW3 on the real card): a short stroke waiting for host data takes the
+    /* Graphics Ultra (measured on a real card): a short stroke waiting for host data takes the
        low byte of the next FIFO entry that is not PIX_TRANS for all its remaining pixels, and
        that entry still goes to its own register. */
     if (ATI_GRAPHICS_ULTRA && mach->accel.ssv_wait && (port != 0xe2e8)) {
@@ -4788,7 +4788,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                whatever DP_CONFIG happens to hold stale. */
             mach->accel.dp_compat = 1;
             mach->accel.src_reload = 1;
-            /* Graphics Ultra (M8LOPT on the real card): CMD and LINEDRAW_OPT share the line bits, so a CMD
+            /* Graphics Ultra (measured on a real card): CMD and LINEDRAW_OPT share the line bits, so a CMD
                write sets LINEDRAW_OPT's direction (7:5), DIR_TYPE (3) and LAST_PEL_OFF (2) from its own;
                whichever register is written last decides. */
             if (ATI_GRAPHICS_ULTRA)
@@ -4797,7 +4797,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             break;
 
         case 0x9ee8:
-            /* Graphics Ultra (M8ROW3 on the real card): with host data selected, the first vector
+            /* Graphics Ultra (measured on a real card): with host data selected, the first vector
                of the pair does not wait for it - its pixels take the low byte of this word, as the
                Mach32 guide warns. The second vector waits for PIX_TRANS. */
             if (ATI_GRAPHICS_ULTRA && (len == 2) && (dev->accel.cmd & 0x100) && ibm8514_cpu_src(svga)) {
@@ -4840,7 +4840,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
                             mach_log(mach->log,"IBM transfer.\n");
 
-                            /* Graphics Ultra (M8ROW3, M8SEQ and M8MONO on the real card): with 16-bit host data
+                            /* Graphics Ultra (measured on a real card): with 16-bit host data
                                (CMD bit 9) and LSB_FIRST (bit 12) clear, colour host data takes its first pixel
                                from the high byte. Monochrome host data (PIX_CNTL mix select = CPU data) keeps the
                                order the 8514/A path already gives it. Command 4 orders its own bytes. */
@@ -4895,7 +4895,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
                             mach_log(mach->log,"IBM transfer.\n");
 
-                            /* Graphics Ultra (M8ROW3, M8SEQ and M8MONO on the real card): with 16-bit host data
+                            /* Graphics Ultra (measured on a real card): with 16-bit host data
                                (CMD bit 9) and LSB_FIRST (bit 12) clear, colour host data takes its first pixel
                                from the high byte. Monochrome host data (PIX_CNTL mix select = CPU data) keeps the
                                order the 8514/A path already gives it. Command 4 orders its own bytes. */
@@ -4986,7 +4986,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
         case 0xbae8:
             /* On the Graphics Ultra a FRGD_MIX write after DP_CONFIG hands the source
                back to the 8514/A registers, as a CMD write does. The other registers in
-               this group do not (M8SRC). */
+               this group do not (measured on a real card). */
             if (ATI_GRAPHICS_ULTRA && (port == 0xbae8) && (len == 2))
                 mach->accel.dp_compat = 1;
             ibm8514_accel_out_fifo(svga, port, val, len);
@@ -5383,7 +5383,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
             dev->ext_pitch = ((mach->accel.ge_pitch & 0xff) << 3);
             mach->accel.compat_pitch = 0;
             dev->accel.x_wrap = 0;
-            /* Graphics Ultra (M8EXP on the real card): GE_PITCH applies to the extended drawing
+            /* Graphics Ultra (measured on a real card): GE_PITCH applies to the extended drawing
                path at once, without a mode set. */
             if (ATI_GRAPHICS_ULTRA) {
                 mach->accel.src_pitch = dev->ext_pitch;
@@ -5641,7 +5641,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
         case 0xc6ee:
             mach_log(mach->log, "C6EE.\n");
-            /* Graphics Ultra (M8ROW3 on the real card; Mach32 guide, EXT_SHORT_STROKE): two IBM
+            /* Graphics Ultra (measured on a real card; Mach32 guide, EXT_SHORT_STROKE): two IBM
                short stroke vectors, bits 15:8 first, each drawn as an extended degree-mode line
                with the DP_CONFIG data path - colour patterns included. A move vector only moves. */
             if (ATI_GRAPHICS_ULTRA && (len == 2)) {
@@ -5714,7 +5714,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 }
 
                 mach_log(mach->log,"ScanToX=%04x, mono_src=%d, bkgd_sel=%d, frgd_sel=%d, pixread=%x.\n", mach->accel.dp_config, mono_src, bkgd_sel, frgd_sel, mach_pixel_read(mach));
-                /* Graphics Ultra (M8PF on the real card; guide 9-61): a CUR_X write clears the fill
+                /* Graphics Ultra (measured on a real card; guide 9-61): a CUR_X write clears the fill
                    flag and each SCAN_TO_X toggles it. With the flag clear it draws; with it set it
                    only moves CUR_X there, so an edge list is one write per edge. */
                 if (ATI_GRAPHICS_ULTRA && mach->accel.scan_fill_flag) {
@@ -5736,7 +5736,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 mach->accel.dp_config = val;
                 mach->accel.dp_compat = 0;
                 mach->accel.src_reload = 1;
-                /* Graphics Ultra (M8BLRD on the real card): FG_COLOR_SRC also becomes the 8514/A
+                /* Graphics Ultra (measured on a real card): FG_COLOR_SRC also becomes the 8514/A
                    foreground source, so the register written last chooses it for 8514/A commands
                    too. The background and mono sources are not measured. */
                 if (ATI_GRAPHICS_ULTRA && (mach_frgd_sel(mach, dev) <= 3))
@@ -5756,7 +5756,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
 
         case 0xd6ee:
             mach->accel.patt_idx = val & 0x1f;
-            if (ATI_GRAPHICS_ULTRA) /*M8ROW3 on the real card: the next pixel takes this pattern entry*/
+            if (ATI_GRAPHICS_ULTRA) /*Measured on a real card: the next pixel takes this pattern entry*/
                 mach->accel.color_pattern_idx = mach->accel.patt_idx;
             frgd_sel = mach_frgd_sel(mach, dev);
 
@@ -5830,7 +5830,7 @@ mach_accel_out_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, u
                 if (mach->accel.line_idx & 1) {
                     /* Every point written grows the bounds accumulator (guide p. 9-48). A coordinate
                        outside the device range (-512..1535) counts as 2047 above it, -2048 below it
-                       (TS2 sub-tests 17-23 on the real card). */
+                       (TEST.COM sequence 2 sub-tests 17-23 on the real card). */
                     int16_t px = (int16_t) mach->accel.line_array[mach->accel.line_idx - 1];
                     int16_t py = (int16_t) mach->accel.line_array[mach->accel.line_idx];
 
@@ -6015,7 +6015,7 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                                 break;
                             case 5:
                                 /* The raster draw resets SX when it finishes, so on the Graphics Ultra the end
-                                   of the draw is what ends a read (M8CONF tests 66 and 67 on the real card). */
+                                   of the draw is what ends a read (measured on a real card). */
                                 if ((dev->accel.sx >= mach->accel.width) || (ATI_GRAPHICS_ULTRA && dev->accel.cmd_back))
                                     dev->data_available = 0;
                                 break;
@@ -6107,7 +6107,7 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                         /* Monochrome read (DP_CONFIG READ_MODE): 16 pixels per word, packed as the
                            monochrome write takes them - from bit 15 down unless LSB_FIRST is set. A pixel
                            is 1 when (P | ~RD_MASK) == FFh, RD_MASK unrotated in ATI operations (ATI guide,
-                           RD_MASK note 3 and PIX_TRANS note 2). TS2 sub-test 14 reads back what it wrote. */
+                           RD_MASK note 3 and PIX_TRANS note 2). TEST.COM sequence 2 sub-test 14 reads back what it wrote. */
                         uint8_t rdm = dev->accel.rd_mask & 0xff;
 
                         temp = 0;
@@ -6122,8 +6122,8 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                         /* Colour read of a blit or a raster draw: with 16-bit data two pixels per word taken
                            along the trajectory, so a row of odd width runs on into the next row; with 8-bit
                            data one pixel per word. The first pixel is in D15:8 unless LSB_FIRST is set (guide,
-                           DP_CONFIG), and a word past the end is padded with 0. TS2 sub-test 24 and M8CONF
-                           tests 66 and 67 on the real card. */
+                           DP_CONFIG), and a word past the end is padded with 0. Measured on a real card, and
+                           ATI TEST.COM sequence 2 sub-test 24. */
                         int npx = (mach->accel.dp_config & 0x200) ? 2 : 1;
 
                         temp = 0;
@@ -6185,7 +6185,7 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
                                aligned group (Richter & Smith p. 299). A pixel is 1 when every RD_MASK plane
                                is set, and an IBM monochrome read takes RD_MASK rotated left one bit (ATI
                                guide p. 8-48). A 16-bit read carries two groups; the first is built in the
-                               low byte here, as the swap below expects. TS2 sub-tests 2-11 match. */
+                               low byte here, as the swap below expects. TEST.COM sequence 2 sub-tests 2-11 match. */
                             uint8_t rdm   = ((dev->accel.rd_mask & 0x01) << 7) | ((dev->accel.rd_mask & 0xfe) >> 1);
                             int     ngrp  = (dev->accel.cmd & 0x200) ? 2 : 1;
                             int     x     = dev->accel.cx;
@@ -6295,7 +6295,7 @@ mach_accel_in_fifo(mach_t *mach, svga_t *svga, ibm8514_t *dev, uint16_t port, in
             break;
 
         case 0xd6ee:
-            if (len == 2) /*the Graphics Ultra returns the index as drawing left it (TS2 sub-tests 26-31)*/
+            if (len == 2) /*the Graphics Ultra returns the index as drawing left it (TEST.COM sequence 2 sub-tests 26-31)*/
                 temp = ATI_GRAPHICS_ULTRA ? mach->accel.color_pattern_idx : mach->accel.patt_idx;
             break;
 
@@ -6823,7 +6823,7 @@ mach_accel_in_call(uint16_t port, mach_t *mach, svga_t *svga, ibm8514_t *dev, in
                     temp |= 0x2000;
 
                 mach->force_busy = 0;
-                /*The Graphics Ultra reads EE_DATA_IN as 0 while the EEPROM is not selected (M8REGS on the card).*/
+                /*The Graphics Ultra reads EE_DATA_IN as 0 while the EEPROM is not selected (measured on a real card).*/
                 if (ati_eeprom_read(&mach->eeprom) && (!ATI_GRAPHICS_ULTRA || mach->eeprom.oldena))
                     temp |= 0x4000;
                 if (ATI_GRAPHICS_ULTRA) /*pre-clip status, see mach_clip_point()*/
