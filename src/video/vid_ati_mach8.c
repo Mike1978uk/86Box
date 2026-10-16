@@ -7198,6 +7198,18 @@ mach_accel_inb(uint16_t port, void *priv)
     return temp;
 }
 
+/* DIAGNOSTIC, not for upstream: MACH8_WLOG=1 logs every Graphics Ultra port write (M8W) and word read
+   (M8R), for per-operation bus counts. A write to SCRATCH_PAD_1 (56EEh) is the probe's marker between operations. */
+static int
+mach8_wlog(void)
+{
+    static int on = -1;
+
+    if (on < 0)
+        on = getenv("MACH8_WLOG") != NULL;
+    return on;
+}
+
 static uint16_t
 mach_accel_inw(uint16_t port, void *priv)
 {
@@ -7210,6 +7222,8 @@ mach_accel_inw(uint16_t port, void *priv)
     else
         temp = mach_accel_in(port, mach, 2);
 
+    if (mach8_wlog())
+        pclog("M8R %04X %04X 2\n", port, temp);
     mach_log(mach->log,"%04X:%08X: INW port=%04x, temp=%04x.\n", CS, cpu_state.pc, port, temp);
     return temp;
 }
@@ -9137,6 +9151,8 @@ mach_combo_accel_out_fifo(void *priv, uint16_t port, uint16_t val, int len)
     int        idx;
 
     mach_log(mach->log,"Accel OUT Combo=%04x, val=%04x, len=%d.\n", port, val, len);
+    if (mach8_wlog() && ATI_GRAPHICS_ULTRA && !mach->crt_replay)
+        pclog("M8W %04X %04X %d\n", port, val, len);
     if (!ATI_GRAPHICS_ULTRA || mach->crt_replay) {
         mach_accel_out_fifo(mach, svga, dev, port, val, len);
         return;
